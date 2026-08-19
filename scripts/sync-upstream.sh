@@ -114,7 +114,10 @@ cleanup() {
 trap cleanup EXIT
 
 git worktree add --detach "$tmp_worktree" HEAD >/dev/null
-if git -C "$tmp_worktree" merge --no-commit --no-ff "$target"; then
+if git -C "$tmp_worktree" \
+	-c user.name="omp-sync-check" \
+	-c user.email="omp-sync-check@localhost" \
+	merge --no-commit --no-ff "$target"; then
 	echo "sync-upstream: CLEAN — upstream can be merged without conflicts"
 	echo "sync-upstream: changed files in candidate merge"
 	git -C "$tmp_worktree" diff --stat HEAD
