@@ -1,0 +1,45 @@
+name: Check OMP upstream sync
+
+on:
+  workflow_dispatch:
+    inputs:
+      upstream_ref:
+        description: Upstream branch or tag to check
+        required: true
+        default: main
+        type: string
+  schedule:
+    - cron: "17 5 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check upstream merge safety
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout Termux branch
+        uses: actions/checkout@v4
+        with:
+          ref: termux
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check upstream merge
+        id: sync
+        env:
+          UPSTREAM_REF: ${{ inputs.upstream_ref || 'main' }}
+        run: |
+          set -o pipefail
+          bash scripts/sync-upstream.sh --check --upstream-ref "$UPSTREAM_REF" \
+            2>&1 | tee "$RUNNER_TEMP/omp-sync-report.txt"
+
+      - name: Upload sync report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: omp-upstream-sync-report
+          path: ${{ runner.temp }}/omp-sync-report.txt
+          if-no-files-found: ignore
