@@ -45,19 +45,22 @@ const BINARY_DOWNLOAD_TIMEOUT_MS = 15 * 60_000;
 const NATIVES_PACKAGE = "@oh-my-pi/pi-natives";
 
 /**
- * Platform tags the release pipeline publishes as
- * `@oh-my-pi/pi-natives-<tag>` leaves. Mirrors `SUPPORTED_PLATFORMS` in
- * `packages/natives/native/loader-state.js` and `LEAF_TARGETS` in
- * `packages/natives/scripts/gen-npm-packages.ts`; kept here as the local
- * source of truth so the update path stays free of cross-package imports.
+ * Leaf tags the release pipeline actually publishes as
+ * `@oh-my-pi/pi-natives-<tag>` leaves. This is the published subset of
+ * `SUPPORTED_PLATFORMS` in `packages/natives/native/loader-state.js` and
+ * `LEAF_TARGETS` in `packages/natives/scripts/gen-npm-packages.ts`; kept here as
+ * the local source of truth so the update path stays free of cross-package
+ * imports. Android (`android-arm64`) is intentionally absent because Android
+ * installs/updates are source-backed (see `scripts/install.sh` and the README
+ * Termux section), and its leaf is not published.
  */
-const SUPPORTED_NATIVE_TAGS: ReadonlySet<string> = new Set([
-	"linux-x64",
-	"linux-arm64",
-	"darwin-x64",
-	"darwin-arm64",
-	"win32-x64",
-]);
+const SUPPORTED_NATIVE_TAGS: Readonly<Record<string, true>> = {
+	"linux-x64": true,
+	"linux-arm64": true,
+	"darwin-x64": true,
+	"darwin-arm64": true,
+	"win32-x64": true,
+};
 
 function currentNativeTag(): string {
 	return `${process.platform}-${process.arch}`;
@@ -925,7 +928,7 @@ export async function replaceBinaryForUpdate(options: BinaryReplacementOptions):
 
 function buildVersionedPackageInstallArgs(expectedVersion: string, nativeTag: string): string[] {
 	const args = [`${PACKAGE}@${expectedVersion}`, `${NATIVES_PACKAGE}@${expectedVersion}`];
-	if (SUPPORTED_NATIVE_TAGS.has(nativeTag)) {
+	if (nativeTag in SUPPORTED_NATIVE_TAGS) {
 		args.push(`${NATIVES_PACKAGE}-${nativeTag}@${expectedVersion}`);
 	}
 	return args;
