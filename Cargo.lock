@@ -5040,7 +5040,6 @@ dependencies = [
 name = "pi-voice"
 version = "17.2.12"
 dependencies = [
- "audiopus_sys",
  "bytes",
  "flume",
  "libc",

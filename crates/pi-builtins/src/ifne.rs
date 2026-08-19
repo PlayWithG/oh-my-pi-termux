@@ -299,7 +299,7 @@ mod tests {
 	#[test]
 	fn early_exiting_child_is_not_an_error() {
 		let big = "a".repeat(1 << 20);
-		let result = run_in(&big, &["/usr/bin/head", "-c", "1"]);
+		let result = run_in(&big, &["head", "-c", "1"]);
 		assert_eq!(result, (0, "a".to_string(), String::new()));
 	}
 

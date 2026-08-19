@@ -16,7 +16,7 @@ pub use pi_builtins::ProcessStatus;
 
 use crate::cancel::CancelToken;
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 mod platform {
 	use std::{
 		collections::HashSet,
@@ -29,11 +29,12 @@ mod platform {
 
 	use super::ProcessStatus;
 
-	/// Stable Linux process reference backed by a pidfd.
+	/// Stable Linux/Android process reference. A pidfd is preferred when the
+	/// kernel exposes it; the start time pins the PID for the fallback path.
 	#[derive(Clone)]
 	pub struct Process {
 		pid:        i32,
-		pidfd:      Arc<OwnedFd>,
+		pidfd:      Option<Arc<OwnedFd>>,
 		start_time: u64,
 	}
 
@@ -42,8 +43,8 @@ mod platform {
 			if pid <= 0 {
 				return None;
 			}
-			let pidfd = open_pidfd(pid)?;
 			let start_time = read_start_time(pid)?;
+			let pidfd = open_pidfd(pid);
 			Some(Self { pid, pidfd, start_time })
 		}
 
@@ -155,21 +156,34 @@ mod platform {
 		}
 
 		pub fn kill(&self, signal: i32) -> bool {
-			// SAFETY: `self.pidfd` is an owned file descriptor returned by a successful
-			// `pidfd_open` call and remains open for the duration of this syscall. A null
-			// `siginfo_t` pointer is explicitly accepted by `pidfd_send_signal` and makes
-			// the kernel synthesize the same signal metadata as `kill(2)`. Flags are zero,
-			// which is the documented default behavior.
-			let ret = unsafe {
-				libc::syscall(
-					libc::SYS_pidfd_send_signal,
-					self.pidfd.as_raw_fd(),
-					signal,
-					ptr::null::<libc::siginfo_t>(),
-					0,
-				)
-			};
-			ret == 0
+			if let Some(pidfd) = &self.pidfd {
+				// SAFETY: `pidfd` is an owned descriptor returned by `pidfd_open` and
+				// remains open for the duration of this syscall. A null `siginfo_t`
+				// pointer is explicitly accepted by `pidfd_send_signal`.
+				let ret = unsafe {
+					libc::syscall(
+						libc::SYS_pidfd_send_signal,
+						pidfd.as_raw_fd(),
+						signal,
+						ptr::null::<libc::siginfo_t>(),
+						0,
+					)
+				};
+				if ret == 0 {
+					return true;
+				}
+			}
+
+			// Older Android kernels and restricted sandboxes may not expose pidfd.
+			// Re-check the proc start time before the numeric-PID fallback; this
+			// preserves the no-PID-reuse invariant up to the unavoidable kill(2)
+			// race between the check and the syscall.
+			if !self.live_identity() {
+				return false;
+			}
+			// SAFETY: `kill` takes integer identifiers by value and does not access
+			// caller-owned memory. The identity check above rejects a recycled PID.
+			unsafe { libc::kill(self.pid, signal) == 0 }
 		}
 
 		pub fn group_id(&self) -> Option<i32> {
@@ -177,26 +191,30 @@ mod platform {
 				return None;
 			}
 
-			// SAFETY: `self.pid` names the process currently referenced by `self.pidfd`
-			// unless it exits concurrently. If it exits, `getpgid` reports failure rather
-			// than dereferencing caller-owned memory.
+			// SAFETY: `self.pid` names the process currently referenced by the
+			// start-time-validated reference unless it exits concurrently. If it
+			// exits, `getpgid` reports failure rather than dereferencing memory.
 			let pgid = unsafe { libc::getpgid(self.pid) };
 			if pgid > 0 { Some(pgid) } else { None }
 		}
 
 		pub fn status(&self) -> ProcessStatus {
+			let Some(pidfd) = &self.pidfd else {
+				return if read_start_time(self.pid) == Some(self.start_time) {
+					ProcessStatus::Running
+				} else {
+					ProcessStatus::Exited
+				};
+			};
+
 			loop {
 				let mut pollfd =
-					libc::pollfd { fd: self.pidfd.as_raw_fd(), events: libc::POLLIN, revents: 0 };
-				// SAFETY: `pollfd` points to one initialized `pollfd` element, and the pidfd
-				// remains open for the duration of the call. Timeout zero makes this a
-				// non-blocking readiness probe.
+					libc::pollfd { fd: pidfd.as_raw_fd(), events: libc::POLLIN, revents: 0 };
+				// SAFETY: `pollfd` points to one initialized `pollfd` element, and the
+				// pidfd remains open for the duration of the call. Timeout zero makes
+				// this a non-blocking readiness probe.
 				let ready = unsafe { libc::poll(&raw mut pollfd, 1, 0) };
 				if ready < 0 {
-					// Retry on EINTR; for any other transient poll error treat the pidfd as
-					// still running. The pidfd is still owned and the kernel has not reported
-					// the process gone — a spurious `Exited` here makes every downstream
-					// signal/kill fall through silently.
 					if std::io::Error::last_os_error().raw_os_error() == Some(libc::EINTR) {
 						continue;
 					}

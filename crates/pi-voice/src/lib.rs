@@ -18,6 +18,9 @@
 //! addon. Callback fields ([`live::LiveCallbacks`]) are invoked from tokio
 //! worker threads and must not block.
 
+#[cfg(target_os = "android")]
+mod opus_compat;
+
 pub mod audio;
 pub(crate) mod device;
 pub mod live;

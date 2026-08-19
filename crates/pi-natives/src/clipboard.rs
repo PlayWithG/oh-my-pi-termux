@@ -4,9 +4,12 @@
 //! Performs text copy synchronously so macOS writes run on the caller thread.
 //! This avoids worker-thread `AppKit` pasteboard warnings in CLI contexts.
 
+#[cfg(not(target_os = "android"))]
 use std::io::Cursor;
 
+#[cfg(not(target_os = "android"))]
 use arboard::{Clipboard, Error as ClipboardError, ImageData};
+#[cfg(not(target_os = "android"))]
 use image::{DynamicImage, ImageFormat, RgbaImage};
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
@@ -22,6 +25,7 @@ pub struct ClipboardImage {
 	pub mime_type: String,
 }
 
+#[cfg(not(target_os = "android"))]
 fn encode_png(image: ImageData<'_>) -> Result<Vec<u8>> {
 	let width = u32::try_from(image.width)
 		.map_err(|_| Error::from_reason("Clipboard image width overflow"))?;
@@ -32,7 +36,7 @@ fn encode_png(image: ImageData<'_>) -> Result<Vec<u8>> {
 		.ok_or_else(|| Error::from_reason("Clipboard image buffer size mismatch"))?;
 	rgba_to_png(buffer)
 }
-
+#[cfg(not(target_os = "android"))]
 fn rgba_to_png(buffer: RgbaImage) -> Result<Vec<u8>> {
 	let capacity = (buffer
 		.width()
@@ -55,7 +59,7 @@ fn rgba_to_png(buffer: RgbaImage) -> Result<Vec<u8>> {
 /// the pixel offset for V4/V5 headers with `BI_BITFIELDS` compression (it
 /// skips 12 trailing mask bytes that those headers embed instead), which is
 /// why Qt-based screenshot tools (`PixPin`, `Snipaste`, ...) fail through
-/// arboard in the first place (#3426).
+#[cfg(not(target_os = "android"))]
 #[cfg_attr(
 	not(windows),
 	allow(
@@ -179,7 +183,7 @@ fn set_clipboard_text(text: String) -> Result<()> {
 /// exits, so a transient `Clipboard` is sufficient. Keeping the write on the
 /// calling thread also avoids worker-thread `AppKit` pasteboard warnings on
 /// macOS.
-#[cfg(not(target_os = "linux"))]
+#[cfg(all(not(target_os = "linux"), not(target_os = "android")))]
 fn set_clipboard_text(text: String) -> Result<()> {
 	let mut clipboard = Clipboard::new()
 		.map_err(|err| Error::from_reason(format!("Failed to access clipboard: {err}")))?;
@@ -188,6 +192,29 @@ fn set_clipboard_text(text: String) -> Result<()> {
 		.map_err(|err| Error::from_reason(format!("Failed to copy to clipboard: {err}")))?;
 	Ok(())
 }
+
+/// Android: use the optional Termux:API clipboard command when installed.
+#[cfg(target_os = "android")]
+fn set_clipboard_text(text: String) -> Result<()> {
+	let status = std::process::Command::new("termux-clipboard-set")
+		.arg(text)
+		.status()
+		.map_err(|err| {
+			Error::from_reason(format!(
+				"Termux clipboard support is unavailable; install Termux:API: {err}"
+			))
+		})?;
+	if status.success() {
+		Ok(())
+	} else {
+		Err(Error::from_reason(format!(
+			"termux-clipboard-set failed with status {}",
+			status
+		)))
+	}
+}
+
+#[cfg(not(target_os = "android"))]
 
 /// Read an image from the system clipboard.
 ///
@@ -221,13 +248,22 @@ pub fn read_image_from_clipboard() -> task::Promise<Option<ClipboardImage>> {
 						mime_type: "image/png".to_string(),
 					}));
 				}
+
+
 				Err(Error::from_reason(format!("Failed to read clipboard image: {err}")))
 			},
 		}
 	})
 }
+/// Android's Termux:API exposes text clipboard access only; image clipboard
+/// reads are not available through the native command-line integration.
+#[cfg(target_os = "android")]
+#[napi]
+pub fn read_image_from_clipboard() -> task::Promise<Option<ClipboardImage>> {
+	task::blocking("clipboard.read_image", (), move |_| Ok(None))
+}
 
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "android")))]
 mod tests {
 	use super::dib_to_png;
 

@@ -35,14 +35,14 @@ mod wasapi;
 #[cfg(target_os = "windows")]
 use wasapi as imp;
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 mod linux;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use linux as imp;
 
-#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux", target_os = "android")))]
 mod unsupported;
-#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux", target_os = "android")))]
 use unsupported as imp;
 
 use crate::VoiceResult;

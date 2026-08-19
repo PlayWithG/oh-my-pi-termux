@@ -658,7 +658,8 @@ mod tests {
 		assert!(!root.join("dir_a").join("dir_b").exists());
 	}
 
-	#[cfg(unix)]
+	// Android's app sandbox may deny hard-link creation before the builtin is exercised.
+	#[cfg(all(unix, not(target_os = "android")))]
 	#[test]
 	fn hard_link_shares_inode() {
 		use std::os::unix::fs::MetadataExt;

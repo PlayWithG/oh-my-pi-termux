@@ -4591,7 +4591,7 @@ fn uu_sort(host: &mut Host, matches: &ArgMatches, legacy_warnings: &[LegacyKeyWa
 		.get_one::<String>(options::TMP_DIR)
 		.map(PathBuf::from)
 		.or_else(|| host.var("TMPDIR").map(PathBuf::from))
-		.unwrap_or_else(|| PathBuf::from("/tmp"));
+		.unwrap_or_else(std::env::temp_dir);
 	let mut tmp_dir = TmpDirWrapper::new(host.resolve(tmp_base));
 
 	settings.compress = matches

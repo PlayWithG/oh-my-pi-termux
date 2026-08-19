@@ -2297,6 +2297,10 @@ mod tests {
 		}));
 	}
 
+	// Android app sandboxes deny `/proc/uptime` and `/proc/stat`; `ProcInfo::age()`
+	// therefore returns `None` and `lstart` deliberately emits the documented `?`
+	// fallback. This date-format assertion is not applicable on Android.
+	#[cfg(all(test, not(target_os = "android")))]
 	#[tokio::test(flavor = "multi_thread")]
 	async fn ps_builtin_formats_parseable_long_start_without_a_header() {
 		let pid = std::process::id();
@@ -3014,7 +3018,7 @@ mod tests {
 		let shim = bin.join("pi-test-compress");
 		std::fs::write(
 			&shim,
-			"#!/bin/sh\nprintf 'compressor cwd=%s\\n' \"$PWD\" >&2\nexec /bin/cat\n",
+			"#!/bin/sh\necho \"compressor cwd=$PWD\" >&2\nexec /bin/cat\n",
 		)
 		.expect("write shim");
 		std::fs::set_permissions(&shim, std::fs::Permissions::from_mode(0o755)).expect("chmod shim");

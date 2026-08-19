@@ -1,9 +1,10 @@
 //! Native crash diagnostics.
 //!
-//! Installs Rust-side panic and allocation-error hooks the first time the
-//! native module loads, so any crash inside `pi-natives` writes an actionable
-//! record (thread, payload, backtrace) to disk and to stderr before the host
-//! process exits.
+//! Installs a Rust-side panic hook the first time the native module loads, so
+//! any crash inside `pi-natives` writes an actionable record (thread, payload,
+//! backtrace) to disk and to stderr before the host process exits. An optional
+//! allocation-error hook is available only with the nightly-only
+//! `unstable-alloc-hook` feature.
 //!
 //! Without these hooks, Bun receives only the bare
 //! `memory allocation of N bytes failed` line and aborts with no stack —
@@ -20,10 +21,11 @@
 //! - Backtraces are captured via [`Backtrace::force_capture`], so they work
 //!   regardless of `RUST_BACKTRACE`.
 //! - The crash log path mirrors the JS side (`packages/utils/src/dirs.ts`):
-//!   `$XDG_STATE_HOME/omp/logs/` on Linux / macOS when the user has migrated to
-//!   XDG (i.e. that directory already exists and `PI_CODING_AGENT_DIR` isn't
-//!   pointed somewhere custom), otherwise `<home>/<PI_CONFIG_DIR>/logs/`
-//!   (defaulting to `~/.omp/logs/`).
+//!   `$XDG_STATE_HOME/omp/logs/` on Linux / macOS / Android when the user has
+//!   migrated to XDG (i.e. that directory already exists and
+//!   `PI_CODING_AGENT_DIR` isn't pointed somewhere custom). Android uses the same
+//!   home/XDG semantics, with `HOME` supplied by Termux; otherwise
+//!   `<home>/<PI_CONFIG_DIR>/logs/` (defaulting to `~/.omp/logs/`).
 //! - Hook installation is idempotent across repeated module loads.
 
 use std::{
@@ -36,13 +38,13 @@ use std::{
 	io::Write as _,
 	path::{Path, PathBuf},
 	process,
-	sync::{
-		Once,
-		atomic::{AtomicBool, Ordering},
-	},
+	sync::Once,
 	thread,
 	time::{SystemTime, UNIX_EPOCH},
 };
+
+#[cfg(feature = "unstable-alloc-hook")]
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Default directory name for OMP's per-user state (overridable via
 /// `PI_CONFIG_DIR`, matching `packages/utils/src/dirs.ts`).
@@ -50,10 +52,11 @@ const DEFAULT_CONFIG_DIR: &str = ".omp";
 
 /// App name used as the XDG-root subdirectory (`$XDG_STATE_HOME/omp/`),
 /// matching `APP_NAME` in `packages/utils/src/dirs.ts`.
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "android"))]
 const APP_NAME: &str = "omp";
 
 static INSTALL: Once = Once::new();
+#[cfg(feature = "unstable-alloc-hook")]
 static ALLOC_HOOK_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 thread_local! {
@@ -77,7 +80,7 @@ enum PanicDisposition {
 	LoggedRecoverable,
 }
 
-/// Install the panic and allocation-error hooks. Idempotent.
+/// Install the panic hook and, with the nightly-only feature, the allocation-error hook. Idempotent.
 pub fn install() {
 	INSTALL.call_once(|| {
 		let prev_panic = std::panic::take_hook();
@@ -93,6 +96,7 @@ pub fn install() {
 			},
 		}));
 
+		#[cfg(feature = "unstable-alloc-hook")]
 		std::alloc::set_alloc_error_hook(|layout| {
 			// Print the canonical line before doing anything allocation-prone.
 			// If this is genuine process-wide OOM, report formatting/path work may
@@ -143,6 +147,10 @@ fn panic_disposition() -> PanicDisposition {
 	}
 }
 
+#[cfg_attr(
+	not(feature = "unstable-alloc-hook"),
+	allow(dead_code, reason = "allocator diagnostics are exercised only with the nightly hook")
+)]
 #[derive(Clone, Copy)]
 enum CrashKind {
 	Panic,
@@ -171,6 +179,10 @@ fn format_panic_report(info: &std::panic::PanicHookInfo<'_>) -> String {
 	out
 }
 
+#[cfg_attr(
+	not(feature = "unstable-alloc-hook"),
+	allow(dead_code, reason = "allocator diagnostics are exercised only with the nightly hook")
+)]
 fn format_alloc_report(layout: Layout) -> String {
 	// Capturing a backtrace allocates. If the global allocator is in a state
 	// where small allocations keep failing this will recurse into the hook —
@@ -195,6 +207,10 @@ fn report_header(kind: CrashKind) -> String {
 		pid = process::id(),
 	)
 }
+#[cfg_attr(
+	not(feature = "unstable-alloc-hook"),
+	allow(dead_code, reason = "allocator diagnostics are exercised only with the nightly hook")
+)]
 fn write_alloc_failure_line(mut out: impl std::io::Write, size: usize) {
 	let _ = out.write_all(b"memory allocation of ");
 	let mut digits = [0u8; usize::MAX.ilog10() as usize + 1];
@@ -289,10 +305,10 @@ fn resolve_logs_dir(
 }
 
 /// Compute the XDG-state logs dir if the runtime environment matches the
-/// JS-side eligibility rules in `packages/utils/src/dirs.ts`: linux/macos,
+/// JS-side eligibility rules in `packages/utils/src/dirs.ts`: linux/macos/android,
 /// `$XDG_STATE_HOME` set, `$XDG_STATE_HOME/omp` exists on disk, and
 /// `PI_CODING_AGENT_DIR` is unset or pointing at the default agent dir.
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "android"))]
 fn xdg_state_logs_from_env(home: &Path, config_dir_override: Option<&OsStr>) -> Option<PathBuf> {
 	let default_agent_dir = default_agent_dir(home, config_dir_override);
 	let agent_override = std::env::var_os("PI_CODING_AGENT_DIR");
@@ -305,7 +321,7 @@ fn xdg_state_logs_from_env(home: &Path, config_dir_override: Option<&OsStr>) -> 
 	)
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "android")))]
 #[allow(clippy::missing_const_for_fn, reason = "windows/non-xdg platforms keep the signature")]
 fn xdg_state_logs_from_env(_home: &Path, _config_dir_override: Option<&OsStr>) -> Option<PathBuf> {
 	None
@@ -314,7 +330,7 @@ fn xdg_state_logs_from_env(_home: &Path, _config_dir_override: Option<&OsStr>) -
 /// Pure XDG-eligibility computation extracted for unit testing — no env
 /// reads, no fs reads. `omp_dir_exists` decides whether the candidate
 /// `<xdg_state_home>/omp` actually lives on disk.
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "android"))]
 fn xdg_state_logs(
 	xdg_state_home: Option<&OsStr>,
 	agent_dir_override: Option<&OsStr>,
@@ -337,7 +353,7 @@ fn xdg_state_logs(
 	}
 	Some(omp_dir.join("logs"))
 }
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "android"))]
 fn default_agent_dir(home: &Path, config_dir_override: Option<&OsStr>) -> PathBuf {
 	let config_dir = config_dir_override
 		.filter(|s| !s.is_empty())
@@ -485,7 +501,7 @@ mod tests {
 		assert_eq!(dir, PathBuf::from("/tmp/pi-natives-test-home/.omp-dev/logs"));
 	}
 
-	#[cfg(any(target_os = "linux", target_os = "macos"))]
+	#[cfg(any(target_os = "linux", target_os = "macos", target_os = "android"))]
 	#[test]
 	fn xdg_state_logs_ignores_empty_agent_dir_override() {
 		// An empty PI_CODING_AGENT_DIR is "unset", not a divergent override; it
@@ -516,7 +532,7 @@ mod tests {
 		assert_eq!(dir, PathBuf::from("/xdg/state/omp/logs"));
 	}
 
-	#[cfg(any(target_os = "linux", target_os = "macos"))]
+	#[cfg(any(target_os = "linux", target_os = "macos", target_os = "android"))]
 	#[test]
 	fn xdg_state_logs_resolves_when_dir_exists_and_no_agent_override() {
 		let dir = xdg_state_logs(
@@ -528,7 +544,7 @@ mod tests {
 		assert_eq!(dir, Some(PathBuf::from("/xdg/state/omp/logs")));
 	}
 
-	#[cfg(any(target_os = "linux", target_os = "macos"))]
+	#[cfg(any(target_os = "linux", target_os = "macos", target_os = "android"))]
 	#[test]
 	fn xdg_state_logs_skipped_when_omp_dir_missing() {
 		let dir = xdg_state_logs(
@@ -540,7 +556,7 @@ mod tests {
 		assert_eq!(dir, None);
 	}
 
-	#[cfg(any(target_os = "linux", target_os = "macos"))]
+	#[cfg(any(target_os = "linux", target_os = "macos", target_os = "android"))]
 	#[test]
 	fn xdg_state_logs_skipped_when_xdg_state_home_unset_or_empty() {
 		let default_agent = Path::new("/tmp/pi-natives-test-home/.omp/agent");
@@ -548,7 +564,7 @@ mod tests {
 		assert_eq!(xdg_state_logs(Some(OsStr::new("")), None, default_agent, |_p| true), None);
 	}
 
-	#[cfg(any(target_os = "linux", target_os = "macos"))]
+	#[cfg(any(target_os = "linux", target_os = "macos", target_os = "android"))]
 	#[test]
 	fn xdg_state_logs_skipped_when_agent_dir_overridden() {
 		// `PI_CODING_AGENT_DIR` pointing elsewhere mirrors the JS `isDefault === false`
@@ -562,7 +578,7 @@ mod tests {
 		assert_eq!(dir, None);
 	}
 
-	#[cfg(any(target_os = "linux", target_os = "macos"))]
+	#[cfg(any(target_os = "linux", target_os = "macos", target_os = "android"))]
 	#[test]
 	fn xdg_state_logs_honored_when_agent_override_matches_default() {
 		let default_agent = std::path::absolute(Path::new("./.omp/agent")).unwrap();
@@ -575,13 +591,13 @@ mod tests {
 		assert_eq!(dir, Some(PathBuf::from("/xdg/state/omp/logs")));
 	}
 
-	#[cfg(any(target_os = "linux", target_os = "macos"))]
+	#[cfg(any(target_os = "linux", target_os = "macos", target_os = "android"))]
 	#[test]
 	fn default_agent_dir_uses_dot_omp_by_default() {
 		let dir = default_agent_dir(Path::new("/tmp/pi-natives-test-home"), None);
 		assert_eq!(dir, PathBuf::from("/tmp/pi-natives-test-home/.omp/agent"));
 	}
-	#[cfg(any(target_os = "linux", target_os = "macos"))]
+	#[cfg(any(target_os = "linux", target_os = "macos", target_os = "android"))]
 	#[test]
 	fn default_agent_dir_respects_pi_config_dir() {
 		let dir =

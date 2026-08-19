@@ -41,7 +41,7 @@ pub(crate) fn sanitize_process_command(command: String) -> String {
 		.collect()
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 mod proc_snapshot {
 	use std::{
 		fs,
@@ -239,9 +239,6 @@ mod proc_snapshot {
 			if signal == 0 {
 				return read_stat(self.pid).is_some_and(|stat| stat.start_time == self.stat.start_time);
 			}
-			let Some(pidfd) = open_pidfd(self.pid) else {
-				return false;
-			};
 			if read_stat(self.pid).is_none_or(|stat| stat.start_time != self.stat.start_time) {
 				return false;
 			}
@@ -254,16 +251,22 @@ mod proc_snapshot {
 					return libc::sigqueue(self.pid, signal, value_arg) == 0;
 				}
 			}
-			// SAFETY: pidfd is valid and pidfd_send_signal reads no optional pointers.
-			unsafe {
-				libc::syscall(
-					libc::SYS_pidfd_send_signal,
-					pidfd.as_raw_fd(),
-					signal,
-					std::ptr::null::<libc::siginfo_t>(),
-					0,
-				) == 0
+			if let Some(pidfd) = open_pidfd(self.pid) {
+				// SAFETY: pidfd is valid and pidfd_send_signal reads no optional pointers.
+				return unsafe {
+					libc::syscall(
+						libc::SYS_pidfd_send_signal,
+						pidfd.as_raw_fd(),
+						signal,
+						std::ptr::null::<libc::siginfo_t>(),
+						0,
+					) == 0
+				};
 			}
+			// Older Android kernels may not expose pidfd. The start-time check
+			// above prevents a recycled PID from being targeted before this
+			// best-effort kill(2) fallback.
+			unsafe { libc::kill(self.pid, signal) == 0 }
 		}
 
 		pub fn cpu_time(&self) -> Option<Duration> {
@@ -1080,7 +1083,7 @@ mod proc_snapshot {
 	}
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "android"))]
 pub use proc_snapshot::ProcInfo;
 
 /// The processes a signal must never reach: this one and its ancestors.
@@ -1104,7 +1107,7 @@ pub use proc_snapshot::ProcInfo;
 ///
 /// Listing is unaffected: `pgrep` still reports ancestors and `ps` still shows
 /// them. Only signalling consults this.
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "android"))]
 pub(crate) struct HostProcesses {
 	/// This process and its ancestors, nearest first.
 	pub pids:  smallvec::SmallVec<[i32; 16]>,
@@ -1117,7 +1120,7 @@ pub(crate) struct HostProcesses {
 /// Keeping the walk over this rather than over [`ProcInfo`] lets the recycling
 /// cases — which are otherwise only reachable by winning a race against the OS —
 /// be tested with a synthetic tree.
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "android"))]
 #[derive(Clone, Copy)]
 struct ChainNode {
 	ppid:  Option<i32>,
@@ -1127,7 +1130,7 @@ struct ChainNode {
 	start: u64,
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "android"))]
 impl HostProcesses {
 	/// Walks the parent chain from the current process, taking one process-table
 	/// snapshot.
@@ -1198,7 +1201,7 @@ impl HostProcesses {
 	}
 }
 
-#[cfg(all(test, any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+#[cfg(all(test, any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "android")))]
 mod tests {
 	use super::{HostProcesses, ProcInfo};
 

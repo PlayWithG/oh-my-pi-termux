@@ -21,13 +21,13 @@ use crate::{
 
 // PulseAudio TCP playback stutters with a 20 ms target buffer; 50 ms absorbs
 // transport jitter while preserving interactive latency.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const PLAYBACK_PERIOD_MS: u32 = 50;
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 const PLAYBACK_PERIOD_MS: u32 = 20;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const CAPTURE_PERIOD_MS: u32 = 50;
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 const CAPTURE_PERIOD_MS: u32 = 20;
 // Backends queue up to three periods (AudioQueue buffers, WASAPI padding cap,
 // Pulse `maxlength`/ALSA buffer). Draining needs three silence periods

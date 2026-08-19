@@ -513,7 +513,10 @@ fn parse_proc_match_args(
 								.map_err(|_| (2, "invalid queue value".to_string()))?,
 						);
 					},
-					'q' if mode == ProcMatchMode::Grep && cfg!(target_os = "macos") => {
+					'q'
+						if mode == ProcMatchMode::Grep
+							&& cfg!(any(target_os = "macos", target_os = "android")) =>
+					{
 						options.quiet = true;
 					},
 					'q' => return Err((2, "unrecognized option '-q'".to_string())),
@@ -956,4 +959,3 @@ fn write_proc_match_help(
 	}
 	Ok(())
 }
-

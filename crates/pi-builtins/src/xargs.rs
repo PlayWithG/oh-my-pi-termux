@@ -1445,7 +1445,9 @@ mod tests {
 		assert!(err.contains("255"), "got: {err:?}");
 	}
 
-	#[cfg(unix)]
+	// Android's `/system/bin/sh` returns a normal exit code for `kill -TERM $$`
+	// instead of exposing the terminating signal through `ExitStatusExt`.
+	#[cfg(all(unix, not(target_os = "android")))]
 	#[test]
 	fn signalled_child_yields_125() {
 		let (code, _, err) = run_simple(&["sh", "-c", "kill -TERM $$", "_"], "x\n");
