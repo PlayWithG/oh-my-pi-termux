@@ -40,13 +40,21 @@ Current root capabilities include:
 
 ## Loader and distribution
 
-`native/index.js` calls `loadNative()` from `loader-state.js`. The platform tag is `${process.platform}-${process.arch}`. Supported tags are:
+`native/index.js` calls `loadNative()` from `loader-state.js`. The platform tag is `${process.platform}-${process.arch}` (an `arch` override exists for host-independent tests). Supported tags are:
 
 - `linux-x64`
 - `linux-arm64`
+- `android-arm64` (source-built on device; no published npm leaf)
 - `darwin-x64`
 - `darwin-arm64`
 - `win32-x64`
+
+On native Termux/Android ARM64, the source installer builds the addon on-device; no
+published npm leaf is available. The loader recognizes `android-arm64` and does not
+reuse a `linux-arm64` addon. Clipboard text uses the optional `termux-clipboard-set`
+command from Termux:API; image clipboard reads are unsupported. Android follows the
+same XDG layout for data, state, and cache roots: `$XDG_DATA_HOME/omp`,
+`$XDG_STATE_HOME/omp`, and `$XDG_CACHE_HOME/omp` after migration.
 
 x64 builds have `modern` (x86-64-v3/AVX2) and `baseline` (x86-64-v2) variants. `PI_NATIVE_VARIANT=modern|baseline` overrides automatic detection. Automatic detection reads `/proc/cpuinfo` on Linux, calls `sysctl` on macOS, or queries `System.Runtime.Intrinsics.X86.Avx2` in PowerShell on Windows. Its result is inherited by subsequent workers and child processes through the private `__PI_NATIVE_VARIANT_CACHE` environment entry. Non-x64 builds use an unsuffixed filename.
 
@@ -56,7 +64,7 @@ Filename fallback is:
 - baseline x64: `-baseline.node`, then unsuffixed `.node`;
 - non-x64: unsuffixed `.node` only.
 
-The published core package contains loader JS, declarations, and metadata but no `.node` files. Release publishing generates `@oh-my-pi/pi-natives-<platform>-<arch>` optional-dependency leaf packages and injects them at the same version into the core manifest. `LEAF_TARGETS` in `gen-npm-packages.ts` is the authoritative publish target list.
+The published core package contains loader JS, declarations, and metadata but no `.node` files. Release publishing generates `@oh-my-pi/pi-natives-<platform>-<arch>` optional-dependency leaf packages and injects them at the same version into the core manifest. `LEAF_TARGETS` in `gen-npm-packages.ts` is the authoritative leaf identity list; the release pipeline publishes every tag except `android-arm64`, which is source-only.
 
 ### Candidate ownership and order
 

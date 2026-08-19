@@ -14,7 +14,7 @@ A successful call is not memoized by JS. Repeated calls rely on the runtime's `r
 
 `initLoaderContext()` derives:
 
-- `platformTag`: `${platform}-${process.arch}`;
+- `platformTag`: `${platform}-${arch}` (runtime arch defaults to `process.arch`; the `arch` override exists for host-independent tests);
 - package version and sentinel name `__piNativesV<version_with_underscores>`;
 - package-local `nativeDir` and the directory of `process.execPath`;
 - `nativesDir`, normally `~/.omp/natives`; it uses `$XDG_DATA_HOME/omp/natives` only when `$XDG_DATA_HOME/omp` exists;
@@ -30,9 +30,17 @@ Supported publish tags are:
 
 - `linux-x64`
 - `linux-arm64`
+- `android-arm64` (source-built on device; no published npm leaf)
 - `darwin-x64`
 - `darwin-arm64`
 - `win32-x64`
+
+On native Termux/Android ARM64, the source installer builds the addon on-device; no
+published npm leaf is available. The loader recognizes `android-arm64` and does not
+reuse a `linux-arm64` addon. Clipboard text uses the optional `termux-clipboard-set`
+command from Termux:API; image clipboard reads are unsupported. Android follows the
+same XDG layout for data, state, and cache roots: `$XDG_DATA_HOME/omp`,
+`$XDG_STATE_HOME/omp`, and `$XDG_CACHE_HOME/omp` after migration.
 
 An unsupported tag is reported only after probing candidates.
 

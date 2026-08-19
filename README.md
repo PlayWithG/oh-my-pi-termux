@@ -68,6 +68,127 @@ mise use -g github:can1357/oh-my-pi
 
 macOS · Linux · Windows · bun ≥ 1.3.14
 
+### Termux / Android (ARM64)
+
+Termux is supported as a native Android target. Do not run OMP through
+Ubuntu PRoot, a chroot, or a Linux glibc binary: Android uses Bionic and needs
+an Android-built native addon.
+
+Install the build prerequisites in Termux:
+
+```sh
+pkg update
+pkg install bun curl git clang cmake make pkg-config rust python
+```
+
+Use the self-contained source installer with a native Termux Bun build
+(Bun `>= 1.3.14`):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/can1357/oh-my-pi/main/scripts/install.sh | sh -s -- --source
+```
+
+The installer requires native Android/arm64 Bun. If Bun is not available from
+your current Termux package sources, install another native Bun build before
+running the installer; Linux Bun binaries are not compatible with Android.
+
+The installer keeps a persistent checkout at
+`${PI_SOURCE_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/omp-src}`. Set `PI_SOURCE_DIR`
+to choose another managed checkout location. The first run executes
+`bun run setup`: it installs the workspace dependencies, compiles the Rust
+native addon for `android-arm64`, links the development `omp` wrapper, and can
+take several minutes. Android prebuilt native leaf packages are not published
+yet, so source installation is currently required. If the installer reports
+that Bun's global bin directory is not on `PATH`, add
+`$HOME/.bun/bin` (or `${BUN_INSTALL}/bin`) to your shell configuration.
+The checkout lives under `omp-src`, not `omp`, so OMP's own XDG data root
+(`$XDG_DATA_HOME/omp`) stays separate from the managed checkout.
+
+> [!WARNING]
+> On native Bun 1.3.14 Android arm64, `bun build --compile` can produce a
+> standalone file successfully, but executing that file fails before application
+> code starts. This is a confirmed Bun standalone-runtime limitation, not an
+> OMP limitation. Use `bun run setup` with the source launcher, or a normal
+> (non-compiled) Bun JS bundle, as the supported Android execution paths. This
+> note is scoped to the confirmed Bun 1.3.14 environment and does not claim
+> that future Bun versions are affected.
+
+To update or reinstall, run the same command again. The installer fetches the
+clean managed checkout, reruns the workspace setup, and relinks `omp`:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/can1357/oh-my-pi/main/scripts/install.sh | sh -s -- --source
+```
+
+Pin a tag, branch, or commit with `--ref`:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/can1357/oh-my-pi/main/scripts/install.sh | sh -s -- --source --ref <tag-or-branch-or-commit>
+```
+
+The installer refuses to update a checkout with local changes; keep the
+persistent source directory clean before updating.
+
+Contributors can use the equivalent direct checkout workflow:
+
+```sh
+git clone https://github.com/can1357/oh-my-pi.git
+cd oh-my-pi
+bun install
+export PATH="${BUN_INSTALL:-$HOME/.bun}/bin:$PATH"
+bun run setup
+```
+
+`bun run setup` builds `pi-natives` for `android-arm64`, links the development
+`omp` command, and does not require root. Verify the runtime identity before
+debugging a build:
+
+```sh
+printf 'PREFIX=%s\n' "$PREFIX"
+command -v bun
+bun --version
+bun -e 'console.log({ platform: process.platform, arch: process.arch })'
+uname -a
+omp --version
+omp --help
+```
+
+Text clipboard integration is optional. Install the Termux:API package and
+the companion Android app to enable `copy_to_clipboard`; image clipboard reads
+are not available through the Android command-line integration:
+
+```sh
+pkg install termux-api
+```
+
+The voice backend uses runtime-loaded PulseAudio/ALSA libraries when present.
+Without an accessible audio server/device, the rest of OMP remains usable and
+voice features report the backend error instead of preventing CLI startup.
+
+#### Troubleshooting native checks
+
+On the validated native Termux environment, these checks pass:
+
+```sh
+bun run build
+bun run test
+BIOME_BINARY=/path/to/termux-biome bun run check:tools
+```
+
+`check:tools` passes when `BIOME_BINARY` selects a Biome binary compiled for
+Android. The official `check:types` uses `@typescript/native-preview` and
+`tsgo`, but it is not installable on Android because no `android-arm64` leaf is
+available. The community fork `@garvin29/typescript@next` was tested with
+`tsc`, but it is not a drop-in replacement or official Microsoft support, and
+OMP does not select it automatically because OMP invokes `tsgo`.
+
+The repository's `check:rs`/`rustfmt` check requires nightly because of options
+in `rustfmt.toml`. Rust tests do pass with Termux stable and `cargo-nextest`.
+These are tooling gaps, not runtime failures. Run the full check on a host with
+the supported official TypeScript/native-preview and nightly Rust toolchains,
+or adapt those checks explicitly for Android.
+
+
 ### Shell completions
 
 `omp` generates its own completion scripts for **bash**, **zsh**, and **fish** from the live command/flag metadata, so they never drift from the actual CLI. Subcommands, flags, and enum values complete statically; model names (`--model`, `--smol`, `--slow`, `--plan`) resolve against the bundled model catalog and `--resume` against your on-disk sessions.
