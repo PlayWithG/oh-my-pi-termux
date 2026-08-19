@@ -31,7 +31,14 @@ import { embeddedAddon } from "./embedded-addon.js";
  * post-build `--reset` stub) is the authoritative compiled-mode signal.
  */
 
-const SUPPORTED_PLATFORMS = ["linux-x64", "linux-arm64", "darwin-x64", "darwin-arm64", "win32-x64"];
+const SUPPORTED_PLATFORMS = [
+	"linux-x64",
+	"linux-arm64",
+	"android-arm64",
+	"darwin-x64",
+	"darwin-arm64",
+	"win32-x64",
+];
 
 /**
  * Streaming startup marker, enabled by `PI_DEBUG_STARTUP`. Local copy of the
@@ -408,9 +415,9 @@ export function selectCpuVariant({ arch, override, env, detectAvx2 }) {
 	};
 }
 
-function resolveCpuVariant(override) {
+function resolveCpuVariant(override, arch = process.arch) {
 	const result = selectCpuVariant({
-		arch: process.arch,
+		arch,
 		override,
 		env: process.env,
 		detectAvx2: detectAvx2Support,
@@ -748,11 +755,12 @@ function buildHelpMessage(ctx) {
  * helpers from this file doesn't trigger AVX2 detection or filesystem probes.
  */
 /**
- * @param {{ nativeDir?: string; platform?: NodeJS.Platform | string; isCompiledBinary?: boolean; leafPackageDir?: string | null }} [overrides]
+ * @param {{ nativeDir?: string; platform?: NodeJS.Platform | string; arch?: string; isCompiledBinary?: boolean; leafPackageDir?: string | null }} [overrides]
  */
 export function initLoaderContext(overrides = {}) {
 	const platform = overrides.platform ?? process.platform;
-	const platformTag = `${platform}-${process.arch}`;
+	const arch = overrides.arch ?? process.arch;
+	const platformTag = `${platform}-${arch}`;
 	const packageVersion = packageJson.version;
 	const nativeDir = overrides.nativeDir ?? path.join(import.meta.dir, "..", "native");
 	const execDir = path.dirname(process.execPath);
@@ -787,8 +795,8 @@ export function initLoaderContext(overrides = {}) {
 		nativeDir: normalizedNativeDir,
 	});
 
-	const selectedVariant = resolveCpuVariant(getVariantOverride());
-	const addonFilenames = getAddonFilenames({ tag: platformTag, arch: process.arch, variant: selectedVariant });
+	const selectedVariant = resolveCpuVariant(getVariantOverride(), arch);
+	const addonFilenames = getAddonFilenames({ tag: platformTag, arch, variant: selectedVariant });
 	const addonLabel = selectedVariant ? `${platformTag} (${selectedVariant})` : platformTag;
 
 	const candidates = resolveLoaderCandidates({

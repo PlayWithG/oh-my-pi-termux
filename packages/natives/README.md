@@ -50,6 +50,21 @@ bun run build
 bun run check
 ```
 
+### Termux / Android
+
+On native Termux ARM64, use the Termux Bun runtime and build the addon locally:
+
+```sh
+pkg install git clang cmake make pkg-config rust python
+bun install
+bun run build
+```
+
+The loader identifies this target as `android-arm64`; it must not reuse a
+`linux-arm64` glibc addon. Clipboard text uses `termux-clipboard-set` when the
+optional Termux:API package is installed. Clipboard image reads are currently
+unsupported on Android.
+
 ## Architecture
 
 `@oh-my-pi/pi-natives` publishes a small core package plus generated

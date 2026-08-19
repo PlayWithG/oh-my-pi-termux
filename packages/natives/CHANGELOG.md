@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added native `android-arm64` addon loading and local Termux build support. The
+  Android clipboard path uses the optional `termux-clipboard-set` command for
+  text and reports image reads as unsupported.
+
+### Changed
+
+- Made process references and process-built-in signaling degrade to a
+  start-time-validated `kill(2)` fallback when Android does not provide pidfds.
+
 ## [17.2.12] - 2026-08-08
 
 ### Changed

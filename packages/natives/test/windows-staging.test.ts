@@ -86,6 +86,20 @@ describe("windows native addon staging", () => {
 		).toBe(false);
 	});
 
+	it("keeps Android ARM64 as a distinct native addon identity", () => {
+		expect(getAddonFilenames({ tag: "android-arm64", arch: "arm64", variant: null })).toEqual([
+			"pi_natives.android-arm64.node",
+		]);
+		const context = initLoaderContext({
+			platform: "android",
+			arch: "arm64",
+			isCompiledBinary: false,
+			nativeDir: "/tmp/oh-my-pi/packages/natives/native",
+			leafPackageDir: null,
+		});
+		expect(context.platformTag).toBe("android-arm64");
+		expect(context.addonFilenames).toEqual(["pi_natives.android-arm64.node"]);
+	});
 	it("prepends versionedDir candidates ahead of node_modules when staging on Windows", () => {
 		const versionedDir = "C:\\Users\\Admin\\.omp\\natives\\15.0.1";
 		const userDataDir = "C:\\Users\\Admin\\AppData\\Local\\omp";
