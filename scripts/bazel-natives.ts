@@ -76,6 +76,7 @@ export function hostTargetName(host: HostInfo): string {
 		if (host.arch === "arm64") return "linux-arm64";
 		if (host.arch === "x64") return host.avx2 ? "linux-x64-modern" : "linux-x64-baseline";
 	}
+	if (host.platform === "android" && host.arch === "arm64") return "android-arm64";
 	if (host.platform === "win32" && host.arch === "x64") return "win32-x64-baseline";
 	throw new Error(`No pi_natives addon target for host ${host.platform}-${host.arch}`);
 }
@@ -246,6 +247,27 @@ async function buildWindowsHostAddon(host: HostInfo, destDir: string): Promise<v
 	console.log(`installed ${filename} → ${path.join(destDir, filename)}`);
 }
 
+/** Android host path: build the addon with the local Rust/N-API toolchain. */
+async function buildAndroidHostAddon(destDir: string): Promise<void> {
+	const script = path.join(repoRoot, "packages/natives/scripts/build-bindings.ts");
+	console.log(`android host: building via ${path.relative(repoRoot, script)}`);
+	const proc = Bun.spawn([process.execPath, script], {
+		cwd: repoRoot,
+		stdout: "inherit",
+		stderr: "inherit",
+	});
+	const exitCode = await proc.exited;
+	if (exitCode !== 0) process.exit(exitCode || 1);
+
+	const filename = "pi_natives.android-arm64.node";
+	const builtPath = path.join(repoRoot, "packages/natives/native", filename);
+	if (path.dirname(builtPath) !== destDir) {
+		await fs.mkdir(destDir, { recursive: true });
+		await installAddon(builtPath, path.join(destDir, filename));
+	}
+	console.log(`installed ${filename} → ${path.join(destDir, filename)}`);
+}
+
 async function main(): Promise<void> {
 	const options = parseCliArgs(process.argv.slice(2));
 	const host: HostInfo = { platform: process.platform, arch: process.arch, avx2: detectHostAvx2Support() };
@@ -260,6 +282,16 @@ async function main(): Promise<void> {
 			);
 		}
 		await buildWindowsHostAddon(host, destDir);
+		return;
+	}
+	if (host.platform === "android" && !options.source) {
+		if (options.targets.length !== 1 || options.targets[0] !== "host") {
+			throw new Error(
+				`Cannot bazel-build [${options.targets.join(", ")}] on an Android host: ` +
+					"use `host` for the local Android Rust/N-API build.",
+			);
+		}
+		await buildAndroidHostAddon(destDir);
 		return;
 	}
 	let outputs: string[];
