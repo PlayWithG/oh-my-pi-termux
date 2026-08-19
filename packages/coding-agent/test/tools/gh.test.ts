@@ -1059,10 +1059,13 @@ describe("github tool", () => {
 			const realGitResult = Bun.spawnSync(["which", "git"], { stdout: "pipe", stderr: "pipe" });
 			expect(realGitResult.exitCode).toBe(0);
 			const realGit = new TextDecoder().decode(realGitResult.stdout).trim();
+			const bashPath = $which("bash");
+			expect(bashPath).not.toBeNull();
+			if (bashPath === null) return;
 			const fakeGit = path.join(fakeBin, "git");
 			await fs.writeFile(
 				fakeGit,
-				`#!/usr/bin/env bash
+				`#!${bashPath}
 while [[ "$1" == "-c" ]]; do shift 2; done
 if [[ "$1" == "remote" && "$2" == "add" && "$3" == "forksrc" ]]; then
 	echo "本地化错误：远程 forksrc 已经存在。" >&2

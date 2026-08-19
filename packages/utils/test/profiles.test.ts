@@ -168,7 +168,7 @@ describe("profile directories", () => {
 		process.env.XDG_STATE_HOME = path.join(tempRoot, "state");
 		process.env.XDG_CACHE_HOME = path.join(tempRoot, "cache");
 
-		// Fresh install: XDG vars are set (typical Linux) but no $XDG/omp exists yet.
+		// Fresh install: XDG vars are set (typical Linux or Android) but no $XDG/omp exists yet.
 		// First activation must land in ~/<config-dir>/profiles/work because
 		// the profile-specific XDG path does not exist.
 		setProfile("work");

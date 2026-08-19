@@ -254,6 +254,7 @@ This skill is added after session creation.
 			agentDir: managedAgentDir,
 			sessionManager: SessionManager.inMemory(tempDir),
 			modelRegistry: sharedModelRegistry,
+			enableMCP: false,
 			settings,
 		});
 		let commandMetadataChanges = 0;

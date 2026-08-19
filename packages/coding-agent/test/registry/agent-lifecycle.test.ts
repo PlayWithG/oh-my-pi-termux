@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
+import * as os from "node:os";
 import * as path from "node:path";
 import { AgentLifecycleManager } from "@oh-my-pi/pi-coding-agent/registry/agent-lifecycle";
 import { AgentRegistry, MAIN_AGENT_ID } from "@oh-my-pi/pi-coding-agent/registry/agent-registry";
@@ -184,7 +185,7 @@ describe("AgentLifecycleManager", () => {
 			displayName: "task",
 			kind: "sub",
 			session: null,
-			sessionFile: "/tmp/Revive-Killed.jsonl",
+			sessionFile: path.join(os.tmpdir(), "Revive-Killed.jsonl"),
 			status: "parked",
 		});
 		lifecycle.adopt(

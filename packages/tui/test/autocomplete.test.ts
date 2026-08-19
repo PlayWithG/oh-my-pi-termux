@@ -4,19 +4,21 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { CombinedAutocompleteProvider } from "@oh-my-pi/pi-tui/autocomplete";
 
+const ACCESSIBLE_TMP_DIR = path.resolve(os.tmpdir()).replace(/\\/g, "/");
+
 describe("CombinedAutocompleteProvider", () => {
 	describe("extractPathPrefix", () => {
-		it("extracts / from 'hey /' when forced", async () => {
-			const provider = new CombinedAutocompleteProvider([], "/tmp");
-			const lines = ["hey /"];
+		it("extracts an absolute temporary directory from prose when forced", async () => {
+			const provider = new CombinedAutocompleteProvider([], ACCESSIBLE_TMP_DIR);
+			const lines = [`hey ${ACCESSIBLE_TMP_DIR}/`];
 			const cursorLine = 0;
-			const cursorCol = 5; // After the "/"
+			const cursorCol = lines[0]!.length;
 
 			const result = await provider.getForceFileSuggestions(lines, cursorLine, cursorCol);
 
 			expect(result).not.toBeNull();
 			if (result) {
-				expect(result.prefix).toBe("/");
+				expect(result.prefix).toBe(`${ACCESSIBLE_TMP_DIR}/`);
 			}
 		});
 
@@ -47,16 +49,16 @@ describe("CombinedAutocompleteProvider", () => {
 		});
 
 		it("triggers for absolute paths after slash command argument", async () => {
-			const provider = new CombinedAutocompleteProvider([], "/tmp");
-			const lines = ["/command /"];
+			const provider = new CombinedAutocompleteProvider([], ACCESSIBLE_TMP_DIR);
+			const lines = [`/command ${ACCESSIBLE_TMP_DIR}/`];
 			const cursorLine = 0;
-			const cursorCol = 10; // After the second "/"
+			const cursorCol = lines[0]!.length;
 
 			const result = await provider.getForceFileSuggestions(lines, cursorLine, cursorCol);
 
 			expect(result).not.toBeNull();
 			if (result) {
-				expect(result.prefix).toBe("/");
+				expect(result.prefix).toBe(`${ACCESSIBLE_TMP_DIR}/`);
 			}
 		});
 	});
@@ -105,21 +107,22 @@ describe("CombinedAutocompleteProvider", () => {
 			expect(result).toBeNull();
 		});
 
-		// Requires a real `/tmp` directory at the filesystem root.
+		// Use the runtime's accessible temporary directory; Android/Termux's host
+		// `/tmp` is not traversable by the application UID.
 		it.skipIf(process.platform === "win32")(
 			"falls back to path suggestions for an unmatched mid-prompt slash token",
 			async () => {
 				const provider = new CombinedAutocompleteProvider(
 					[{ name: "skill:security-scan", description: "Security scan" }],
-					"/tmp",
+					ACCESSIBLE_TMP_DIR,
 				);
-				const line = "see /tmp";
+				const line = `see ${ACCESSIBLE_TMP_DIR}`;
 
 				const result = await provider.getSuggestions([line], 0, line.length);
 
 				expect(result).not.toBeNull();
-				expect(result?.prefix).toBe("/tmp");
-				expect(result?.items.map(item => item.value)).toContain("/tmp/");
+				expect(result?.prefix).toBe(ACCESSIBLE_TMP_DIR);
+				expect(result?.items.map(item => item.value)).toContain(`${ACCESSIBLE_TMP_DIR}/`);
 			},
 		);
 

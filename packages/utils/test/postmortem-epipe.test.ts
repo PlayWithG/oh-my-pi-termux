@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { postmortem } from "@oh-my-pi/pi-utils";
 
 const childFlag = "--stdio-epipe-child";
@@ -59,7 +61,7 @@ describe("postmortem broken-pipe handling", () => {
 	});
 
 	it("awaits cleanup and exits successfully when a registered stdio peer disconnects", async () => {
-		const marker = `/tmp/omp-postmortem-stdio-${process.pid}-${Date.now()}`;
+		const marker = path.join(os.tmpdir(), `omp-postmortem-stdio-${process.pid}-${Date.now()}`);
 		const child = Bun.spawn([process.execPath, "run", import.meta.path, childFlag, marker], {
 			stdin: "pipe",
 			stdout: "pipe",
@@ -89,7 +91,7 @@ describe("postmortem broken-pipe handling", () => {
 	});
 
 	it("keeps waiting for active cleanup when another stdio EPIPE arrives", async () => {
-		const marker = `/tmp/omp-postmortem-stdio-race-${process.pid}-${Date.now()}`;
+		const marker = path.join(os.tmpdir(), `omp-postmortem-stdio-race-${process.pid}-${Date.now()}`);
 		const child = Bun.spawn([process.execPath, "run", import.meta.path, raceChildFlag, marker], {
 			stdin: "pipe",
 			stdout: "pipe",

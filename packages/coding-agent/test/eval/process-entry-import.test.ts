@@ -109,35 +109,44 @@ it("dispatches the computer worker from a single npm-style host bundle", async (
 	}
 });
 
-it("keeps non-computer selectors isolated in a compiled single-entry worker host", async () => {
-	using tempDir = TempDir.createSync("@omp-compiled-worker-selector-");
-	const packageDir = path.resolve(import.meta.dir, "../..");
-	const outfile = path.join(tempDir.path(), process.platform === "win32" ? "worker-host.exe" : "worker-host");
-	const build = Bun.spawn(
-		[
-			process.execPath,
-			"build",
-			"--compile",
-			"--target=bun",
-			`--outfile=${outfile}`,
-			path.join(packageDir, "test/fixtures/compiled-worker-selector-host.ts"),
-		],
-		{ cwd: packageDir, stdout: "pipe", stderr: "pipe" },
-	);
-	const [buildExitCode, buildStderr] = await Promise.all([build.exited, new Response(build.stderr).text()]);
-	expect(buildExitCode, buildStderr).toBe(0);
-	const proc = Bun.spawn([outfile], {
-		cwd: packageDir,
-		stdout: "pipe",
-		stderr: "pipe",
-	});
-	const [exitCode, stdout, stderr] = await Promise.all([
-		proc.exited,
-		new Response(proc.stdout).text(),
-		new Response(proc.stderr).text(),
-	]);
-	expect(exitCode, stderr).toBe(0);
-	expect(stdout).toBe('{"ok":true,"kind":"pong"}\n');
-	// Compiles a standalone binary with `bun build --compile` before running it, so
-	// this needs the same headroom as the other compile-backed tests.
-}, 60_000);
+// In the confirmed native Bun 1.3.14 Android arm64 environment, `bun build
+// --compile` can emit a standalone binary that crashes before application code
+// starts. This is a Bun Android standalone-runtime limitation, not an OMP
+// limitation; source execution and non-compiled JS bundles remain supported
+// Android paths.
+it.skipIf(process.platform === "android")(
+	"keeps non-computer selectors isolated in a compiled single-entry worker host",
+	async () => {
+		using tempDir = TempDir.createSync("@omp-compiled-worker-selector-");
+		const packageDir = path.resolve(import.meta.dir, "../..");
+		const outfile = path.join(tempDir.path(), process.platform === "win32" ? "worker-host.exe" : "worker-host");
+		const build = Bun.spawn(
+			[
+				process.execPath,
+				"build",
+				"--compile",
+				"--target=bun",
+				`--outfile=${outfile}`,
+				path.join(packageDir, "test/fixtures/compiled-worker-selector-host.ts"),
+			],
+			{ cwd: packageDir, stdout: "pipe", stderr: "pipe" },
+		);
+		const [buildExitCode, buildStderr] = await Promise.all([build.exited, new Response(build.stderr).text()]);
+		expect(buildExitCode, buildStderr).toBe(0);
+		const proc = Bun.spawn([outfile], {
+			cwd: packageDir,
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		const [exitCode, stdout, stderr] = await Promise.all([
+			proc.exited,
+			new Response(proc.stdout).text(),
+			new Response(proc.stderr).text(),
+		]);
+		expect(exitCode, stderr).toBe(0);
+		expect(stdout).toBe('{"ok":true,"kind":"pong"}\n');
+		// Compiles a standalone binary with `bun build --compile` before running it, so
+		// this needs the same headroom as the other compile-backed tests.
+	},
+	60_000,
+);

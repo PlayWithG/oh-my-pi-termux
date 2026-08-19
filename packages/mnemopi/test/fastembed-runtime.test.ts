@@ -38,23 +38,26 @@ describe("fastembed runtime version pins", () => {
 		expect(plan.versionKey).not.toContain("forced-ort");
 	});
 
-	test("Windows preload selects fastembed's ORT DLL before inherited paths", async () => {
-		const requireTest = createRequire(import.meta.url);
-		const fastembedManifest = requireTest.resolve("fastembed/package.json");
-		const fastembedEntry = requireTest.resolve("fastembed");
-		const inheritedPath = ["/stale-ort", "/system"].join(path.delimiter);
-		const env: NodeJS.ProcessEnv = { PATH: inheritedPath };
-		const { ortEntry, ortPackageDir, dllDir } = await prepareWindowsFastembedRuntime({
-			fastembedEntry,
-			fastembedPackageDir: path.dirname(fastembedManifest),
-			arch: "x64",
-			env,
-		});
-		const ortManifest: { version?: unknown } = requireTest(path.join(ortPackageDir, "package.json"));
+	test.skipIf(process.platform !== "win32")(
+		"Windows preload selects fastembed's ORT DLL before inherited paths",
+		async () => {
+			const requireTest = createRequire(import.meta.url);
+			const fastembedManifest = requireTest.resolve("fastembed/package.json");
+			const fastembedEntry = requireTest.resolve("fastembed");
+			const inheritedPath = ["/stale-ort", "/system"].join(path.delimiter);
+			const env: NodeJS.ProcessEnv = { PATH: inheritedPath };
+			const { ortEntry, ortPackageDir, dllDir } = await prepareWindowsFastembedRuntime({
+				fastembedEntry,
+				fastembedPackageDir: path.dirname(fastembedManifest),
+				arch: "x64",
+				env,
+			});
+			const ortManifest: { version?: unknown } = requireTest(path.join(ortPackageDir, "package.json"));
 
-		expect(ortManifest.version).toBe(packageManifest.peerDependencies["onnxruntime-node"]);
-		expect(ortEntry.startsWith(`${ortPackageDir}${path.sep}`)).toBe(true);
-		expect(await Bun.file(path.join(dllDir, "onnxruntime.dll")).exists()).toBe(true);
-		expect(env.PATH).toBe(`${dllDir}${path.delimiter}${inheritedPath}`);
-	});
+			expect(ortManifest.version).toBe(packageManifest.peerDependencies["onnxruntime-node"]);
+			expect(ortEntry.startsWith(`${ortPackageDir}${path.sep}`)).toBe(true);
+			expect(await Bun.file(path.join(dllDir, "onnxruntime.dll")).exists()).toBe(true);
+			expect(env.PATH).toBe(`${dllDir}${path.delimiter}${inheritedPath}`);
+		},
+	);
 });

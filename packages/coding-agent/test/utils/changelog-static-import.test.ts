@@ -122,35 +122,43 @@ describe("changelog static import resources", () => {
 		}
 	}, 30_000);
 
-	test("reads the emitted changelog asset from a compiled binary", async () => {
-		const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "omp-changelog-compiled-"));
-		try {
-			const binaryPath = path.join(tempDir, "changelog-probe");
-			const unrelatedCwd = path.join(tempDir, "cwd");
-			const missingPackageChangelogPath = path.join(tempDir, "missing-package", "CHANGELOG.md");
-			await fs.mkdir(unrelatedCwd);
-			const sourceResult = await runProbe([process.execPath, bundleProbePath, missingPackageChangelogPath]);
+	// The confirmed native Bun 1.3.14 Android arm64 standalone runtime can crash
+	// before application code starts after a successful `bun build --compile`.
+	// This is a Bun limitation, not an OMP limitation; source and non-compiled
+	// bundle probes remain supported Android paths.
+	test.skipIf(process.platform === "android")(
+		"reads the emitted changelog asset from a compiled binary",
+		async () => {
+			const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "omp-changelog-compiled-"));
+			try {
+				const binaryPath = path.join(tempDir, "changelog-probe");
+				const unrelatedCwd = path.join(tempDir, "cwd");
+				const missingPackageChangelogPath = path.join(tempDir, "missing-package", "CHANGELOG.md");
+				await fs.mkdir(unrelatedCwd);
+				const sourceResult = await runProbe([process.execPath, bundleProbePath, missingPackageChangelogPath]);
 
-			const buildOutput = await Bun.build({
-				entrypoints: [bundleProbePath],
-				root: repoRoot,
-				external: ["omp-legacy-pi-modules"],
-				plugins: [changelogUtilsStubPlugin()],
-				compile: {
-					outfile: binaryPath,
-					autoloadBunfig: false,
-					autoloadDotenv: false,
-					autoloadTsconfig: false,
-					autoloadPackageJson: false,
-				},
-			});
-			expect(buildOutput.success, buildOutput.logs.map(log => log.message).join("\n")).toBe(true);
+				const buildOutput = await Bun.build({
+					entrypoints: [bundleProbePath],
+					root: repoRoot,
+					external: ["omp-legacy-pi-modules"],
+					plugins: [changelogUtilsStubPlugin()],
+					compile: {
+						outfile: binaryPath,
+						autoloadBunfig: false,
+						autoloadDotenv: false,
+						autoloadTsconfig: false,
+						autoloadPackageJson: false,
+					},
+				});
+				expect(buildOutput.success, buildOutput.logs.map(log => log.message).join("\n")).toBe(true);
 
-			const result = await runProbe([binaryPath, missingPackageChangelogPath], unrelatedCwd);
-			expect(result.version).toBe(VERSION);
-			expect(result.entries).toBe(sourceResult.entries);
-		} finally {
-			await fs.rm(tempDir, { force: true, recursive: true });
-		}
-	}, 30_000);
+				const result = await runProbe([binaryPath, missingPackageChangelogPath], unrelatedCwd);
+				expect(result.version).toBe(VERSION);
+				expect(result.entries).toBe(sourceResult.entries);
+			} finally {
+				await fs.rm(tempDir, { force: true, recursive: true });
+			}
+		},
+		30_000,
+	);
 });

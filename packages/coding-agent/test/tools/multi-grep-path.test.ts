@@ -29,19 +29,32 @@ function getText(result: { content: Array<{ type: string; text?: string }> }): s
 
 describe.skipIf(isWindows)("resolveExplicitSearchPaths cross-tree degeneracy", () => {
 	it("returns per-path targets when commonBasePath collapses to filesystem root", async () => {
-		// Two real top-level directories that exist on every Unix host. Their only
-		// shared ancestor is `/`. A naive shared-base scan would walk the entire
-		// filesystem; the resolver must surface explicit `targets` so callers can
-		// fan out instead.
+		// Pick two accessible top-level directories. Their only shared ancestor is
+		// `/`. A naive shared-base scan would walk the entire filesystem; the
+		// resolver must surface explicit `targets` so callers can fan out instead.
 		const cwd = os.tmpdir();
-		const resolved = await resolveExplicitSearchPaths(["/tmp", "/usr"], cwd);
+		const candidates = [...new Set([os.tmpdir(), "/system/bin", "/tmp", "/usr"])].filter(
+			candidate => path.parse(candidate).root === "/",
+		);
+		const existingPaths: string[] = [];
+		for (const candidate of candidates) {
+			try {
+				const stat = await fs.stat(candidate);
+				if (stat.isDirectory()) existingPaths.push(candidate);
+			} catch {
+				// Missing or inaccessible platform-specific roots are not candidates.
+			}
+		}
+		const selectedPaths = existingPaths.slice(0, 2);
+		expect(selectedPaths).toHaveLength(2);
+		const resolved = await resolveExplicitSearchPaths(selectedPaths, cwd);
 
 		expect(resolved).toBeDefined();
 		if (!resolved) throw new Error("expected resolveExplicitSearchPaths to resolve");
 		expect(resolved.basePath).toBe(path.parse(resolved.basePath).root);
 		expect(resolved.targets).toBeDefined();
 		const targetBases = (resolved.targets ?? []).map(target => target.basePath).sort();
-		expect(targetBases).toEqual(["/tmp", "/usr"]);
+		expect(targetBases).toEqual([...selectedPaths].sort());
 	});
 });
 
@@ -88,23 +101,27 @@ describe.skipIf(isWindows)("search with omitted paths", () => {
 });
 
 describe.skipIf(isWindows)("search across unrelated filesystem trees", () => {
-	let dirA: string;
-	let dirB: string;
-	let cwd: string;
+	let dirA: string | undefined;
+	let dirB: string | undefined;
+	let cwd: string | undefined;
 
 	beforeEach(async () => {
-		// Place fixtures in two unrelated top-level subtrees so their only shared
-		// ancestor is the filesystem root. Without the multi-target fanout, the
-		// search tool would scan from `/` and walk the entire filesystem.
-		dirA = await fs.mkdtemp(path.join("/tmp", "pi-search-multi-A-"));
-		dirB = await fs.mkdtemp(path.join("/var/tmp", "pi-search-multi-B-"));
+		dirA = undefined;
+		dirB = undefined;
+		cwd = undefined;
+		// Place fixtures in sibling subtrees under the temp root. Without the
+		// multi-target fanout, the search tool would scan their unrequested parent.
+		dirA = await fs.mkdtemp(path.join(os.tmpdir(), "pi-search-multi-A-"));
+		dirB = await fs.mkdtemp(path.join(os.tmpdir(), "pi-search-multi-B-"));
 		cwd = await fs.mkdtemp(path.join(os.tmpdir(), "pi-search-multi-cwd-"));
 		await Bun.write(path.join(dirA, "alpha.txt"), "shared-needle alpha\n");
 		await Bun.write(path.join(dirB, "beta.txt"), "shared-needle beta\n");
 	});
 
 	afterEach(async () => {
-		await Promise.all([removeWithRetries(dirA), removeWithRetries(dirB), removeWithRetries(cwd)]);
+		await Promise.all(
+			[dirA, dirB, cwd].filter((dir): dir is string => dir !== undefined).map(dir => removeWithRetries(dir)),
+		);
 	});
 
 	it("returns matches from both trees without rooting the scan at /", async () => {

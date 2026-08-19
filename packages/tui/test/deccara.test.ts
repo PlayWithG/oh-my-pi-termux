@@ -49,7 +49,8 @@ async function settle(term: VirtualTerminal): Promise<void> {
 	const nextTick = Promise.withResolvers<void>();
 	process.nextTick(nextTick.resolve);
 	await nextTick.promise;
-	await Bun.sleep(40);
+	// Leave margin over the TUI's ~33 ms render cadence under CPU load.
+	await Bun.sleep(100);
 	await term.flush();
 }
 

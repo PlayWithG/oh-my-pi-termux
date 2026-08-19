@@ -18,6 +18,12 @@ function resolveRepoBiome(): string {
 		},
 		win32: { arm64: ["cli-win32-arm64"], x64: ["cli-win32-x64"] },
 	};
+	// Allow native toolchains such as Android/Termux without inventing an npm platform.
+	const override = Bun.env.BIOME_BINARY?.trim();
+	if (override) {
+		const resolvedOverride = Bun.which(override, { cwd: repoRoot });
+		if (resolvedOverride) return resolvedOverride;
+	}
 	const executable = process.platform === "win32" ? "biome.exe" : "biome";
 	for (const packageName of platformPackages[process.platform]?.[process.arch] ?? []) {
 		try {

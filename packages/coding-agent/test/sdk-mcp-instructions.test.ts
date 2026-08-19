@@ -223,16 +223,17 @@ describe("createAgentSession MCP server instructions (deferred UI)", () => {
 		try {
 			// Deferred discovery is a real child-process handshake with no
 			// completion signal exposed to this integration harness; fake timers
-			// cannot advance it, so retain the established polling bounds above.
+			// cannot advance it, so wait for both prompt sections to be rebuilt.
 			const deadline = Date.now() + 12_000;
 			let prompt = session.systemPrompt.join("\n");
-			while (!prompt.includes(SERVER_INSTRUCTIONS) && Date.now() < deadline) {
+			let renderedMappings = prompt.split("\n").filter(line => line.startsWith('- "row_'));
+			while ((!prompt.includes(SERVER_INSTRUCTIONS) || renderedMappings.length !== 64) && Date.now() < deadline) {
 				await Bun.sleep(50);
 				prompt = session.systemPrompt.join("\n");
+				renderedMappings = prompt.split("\n").filter(line => line.startsWith('- "row_'));
 			}
 
 			expect(prompt).toContain(SERVER_INSTRUCTIONS);
-			const renderedMappings = prompt.split("\n").filter(line => line.startsWith('- "row_'));
 			expect(renderedMappings).toHaveLength(64);
 			expect(renderedMappings[0]).toBe('- "row_aa" → `xd://mcp__instr_row_aa`');
 			expect(renderedMappings[63]).toBe('- "row_cl" → `xd://mcp__instr_row_cl`');

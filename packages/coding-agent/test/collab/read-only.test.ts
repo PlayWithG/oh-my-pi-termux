@@ -9,6 +9,8 @@
  * in-memory transport, so the suite stays fast and time-independent.
  */
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import * as os from "node:os";
+import * as path from "node:path";
 import { importRoomKey } from "@oh-my-pi/pi-coding-agent/collab/crypto";
 import { CollabHost } from "@oh-my-pi/pi-coding-agent/collab/host";
 import { COLLAB_PROTO, type CollabFrame, parseCollabLink } from "@oh-my-pi/pi-coding-agent/collab/protocol";
@@ -17,6 +19,8 @@ import type { InteractiveModeContext } from "@oh-my-pi/pi-coding-agent/modes/typ
 import { AgentRegistry } from "@oh-my-pi/pi-coding-agent/registry/agent-registry";
 import type { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-session";
 import { installInMemoryRelay, uninstallInMemoryRelay } from "./helpers/in-memory-relay";
+
+const tempDir = os.tmpdir();
 
 // In-memory transport: FakeWebSocket + InMemoryRelay (see ./helpers/in-memory-relay)
 // replace the real Bun.serve relay and loopback WebSocket with a zero-latency
@@ -41,9 +45,9 @@ function makeHostContext(): HostHarness {
 		settings: { get: () => "" },
 		sessionManager: {
 			getSessionId: () => "sess-1",
-			getCwd: () => "/tmp",
+			getCwd: () => tempDir,
 			snapshotForReplication: () => ({
-				header: { type: "session", id: "sess-1", timestamp: new Date().toISOString(), cwd: "/tmp" },
+				header: { type: "session", id: "sess-1", timestamp: new Date().toISOString(), cwd: tempDir },
 				entries: [],
 			}),
 			onEntryAppended: undefined,
@@ -233,7 +237,7 @@ describe("collab read-only links", () => {
 			displayName: "remote kill",
 			kind: "sub",
 			session,
-			sessionFile: "/tmp/Remote-Killed-Sub.jsonl",
+			sessionFile: path.join(tempDir, "Remote-Killed-Sub.jsonl"),
 			status: "running",
 		});
 		const killed = Promise.withResolvers<void>();

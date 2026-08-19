@@ -10,8 +10,27 @@ import {
 	toSkillFrontmatter,
 	writeManagedSkill,
 } from "@oh-my-pi/pi-coding-agent/autolearn/managed-skills";
-import { parseFrontmatter, removeWithRetries } from "@oh-my-pi/pi-utils";
+import { hasFsCode, parseFrontmatter, removeWithRetries } from "@oh-my-pi/pi-utils";
 import { getAgentDir, setAgentDir } from "@oh-my-pi/pi-utils/dirs";
+
+async function detectHardLinkSupport(): Promise<boolean> {
+	const fixture = await fs.mkdtemp(path.join(os.tmpdir(), "managed-skills-hardlink-capability-"));
+	try {
+		const source = path.join(fixture, "source.txt");
+		await Bun.write(source, "probe");
+		await fs.link(source, path.join(fixture, "link.txt"));
+		return true;
+	} catch (error) {
+		if (process.platform === "android" && (hasFsCode(error, "EACCES") || hasFsCode(error, "EPERM"))) {
+			return false;
+		}
+		throw error;
+	} finally {
+		await removeWithRetries(fixture);
+	}
+}
+
+const supportsHardLinks = await detectHardLinkSupport();
 
 describe("managed-skills primitives", () => {
 	let tempHome: string;
@@ -214,18 +233,21 @@ describe("managed-skills primitives", () => {
 			}
 		});
 
-		it("refuses to update a SKILL.md that is hard-linked outside managed skills", async () => {
-			await writeManagedSkill({ action: "create", name: "hardlink", description: "d", body: "managed content" });
-			const outside = path.join(tempHome, "authored-hardlink.md");
-			await Bun.write(outside, "user-authored content");
-			await removeWithRetries(skillFile("hardlink"));
-			await fs.link(outside, skillFile("hardlink"));
+		it.skipIf(!supportsHardLinks)(
+			"refuses to update a SKILL.md that is hard-linked outside managed skills",
+			async () => {
+				await writeManagedSkill({ action: "create", name: "hardlink", description: "d", body: "managed content" });
+				const outside = path.join(tempHome, "authored-hardlink.md");
+				await Bun.write(outside, "user-authored content");
+				await removeWithRetries(skillFile("hardlink"));
+				await fs.link(outside, skillFile("hardlink"));
 
-			await expect(
-				writeManagedSkill({ action: "update", name: "hardlink", description: "d", body: "updated" }),
-			).rejects.toThrow(/hard links/);
-			expect(await Bun.file(outside).text()).toBe("user-authored content");
-		});
+				await expect(
+					writeManagedSkill({ action: "update", name: "hardlink", description: "d", body: "updated" }),
+				).rejects.toThrow(/hard links/);
+				expect(await Bun.file(outside).text()).toBe("user-authored content");
+			},
+		);
 	});
 
 	describe("deleteManagedSkill", () => {

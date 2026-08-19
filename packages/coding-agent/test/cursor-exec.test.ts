@@ -31,8 +31,27 @@ import { ExtensionToolWrapper } from "@oh-my-pi/pi-coding-agent/extensibility/ex
 import { BUILTIN_TOOLS, GrepTool, ReadTool, type Tool, type ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 import { BashTool } from "@oh-my-pi/pi-coding-agent/tools/bash";
 import type { TruncationMeta } from "@oh-my-pi/pi-coding-agent/tools/output-meta";
-import { removeWithRetries } from "@oh-my-pi/pi-utils";
+import { hasFsCode, removeWithRetries } from "@oh-my-pi/pi-utils";
 import { AdviseTool } from "../src/advisor/advise-tool";
+
+async function detectHardLinkSupport(): Promise<boolean> {
+	const fixture = await fs.mkdtemp(path.join(os.tmpdir(), "cursor-hardlink-capability-"));
+	try {
+		const source = path.join(fixture, "source.txt");
+		await Bun.write(source, "probe");
+		await fs.link(source, path.join(fixture, "link.txt"));
+		return true;
+	} catch (error) {
+		if (process.platform === "android" && (hasFsCode(error, "EACCES") || hasFsCode(error, "EPERM"))) {
+			return false;
+		}
+		throw error;
+	} finally {
+		await removeWithRetries(fixture);
+	}
+}
+
+const supportsHardLinks = await detectHardLinkSupport();
 
 function createTestSession(cwd: string, overrides: Partial<ToolSession> = {}): ToolSession {
 	return {
@@ -1026,7 +1045,7 @@ describe("CursorExecHandlers mounted tool bridge", () => {
 		}
 	});
 
-	it("refuses a download onto a hard link that shares its inode outside", async () => {
+	it.skipIf(!supportsHardLinks)("refuses a download onto a hard link that shares its inode outside", async () => {
 		// A hard link is a regular file that lives inside the workspace and
 		// passes both containment and `O_NOFOLLOW`, yet writing through it
 		// overwrites every other name for the same inode — including one out of

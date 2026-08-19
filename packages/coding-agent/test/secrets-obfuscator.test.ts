@@ -813,12 +813,13 @@ describe("SecretObfuscator friendlyName placeholders", () => {
 		]);
 		const token = obfuscator.obfuscate("abcdefgh");
 
-		const obfuscated = obfuscator.obfuscate(`api_key=${token}XYZ`);
+		// Lowercase keeps the sentinel disjoint from uppercase/digit placeholder bases.
+		const obfuscated = obfuscator.obfuscate(`api_key=${token}xyz`);
 
 		expect(obfuscated).not.toContain("api_key=");
-		expect(obfuscated).not.toContain("XYZ");
+		expect(obfuscated).not.toContain("xyz");
 		expect(obfuscated).toContain(token);
-		expect(obfuscator.deobfuscate(obfuscated)).toBe("api_key=abcdefghXYZ");
+		expect(obfuscator.deobfuscate(obfuscated)).toBe("api_key=abcdefghxyz");
 		expect(obfuscator.obfuscate(obfuscated)).toBe(obfuscated);
 	});
 
