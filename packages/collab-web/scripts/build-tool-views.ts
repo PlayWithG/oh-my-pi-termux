@@ -16,7 +16,11 @@ const result = await Bun.build({
 	entrypoints: [path.join(root, "src/tool-render/standalone.tsx")],
 	target: "browser",
 	format: "iife",
-	minify: true,
+	// The Android/Bionic Bun port currently aborts in its minifier for this
+	// React/CSS graph; keep the self-contained bundle contract and disable only
+	// that optional optimization on Android.
+	minify: process.platform !== "android",
+	throw: false,
 	define: { "process.env.NODE_ENV": JSON.stringify("production") },
 });
 

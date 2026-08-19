@@ -4,8 +4,9 @@
  * Uses PI_CONFIG_DIR (default ".omp") for the config root and
  * PI_CODING_AGENT_DIR to override the agent directory.
  *
- * On Linux, if XDG_DATA_HOME / XDG_STATE_HOME / XDG_CACHE_HOME environment
- * variables are set, paths are redirected to XDG-compliant locations under
+ * On Linux, macOS, or Android, if XDG_DATA_HOME / XDG_STATE_HOME /
+ * XDG_CACHE_HOME environment variables are set, paths are redirected to
+ * XDG-compliant locations under
  * $XDG_*_HOME/omp/. This requires running `omp config migrate` first to
  * move data to the new locations. No filesystem existence checks are performed
  * — if the env var is set, omp trusts that the migration has been done.
@@ -33,6 +34,7 @@ export const MIN_BUN_VERSION: string = engines.bun.replace(/[^0-9.]/g, "");
 
 const PROFILE_NAME_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const PROFILE_ENV_KEYS = ["OMP_PROFILE", "PI_PROFILE"] as const;
+const IS_XDG_PLATFORM = ["linux", "darwin", "android"].includes(process.platform);
 
 /**
  * Names Windows treats as reserved device aliases. Matches the basename
@@ -220,17 +222,17 @@ export function getConfigAgentDirName(): string {
 type XdgCategory = "data" | "state" | "cache";
 
 /**
- * Resolves and caches all omp directory paths. On Linux, when XDG environment
- * variables are set, paths are redirected under $XDG_*_HOME/omp/. A new
- * instance is created whenever the agent directory changes, which naturally
- * invalidates all cached paths.
+ * Resolves and caches all omp directory paths. On Linux, macOS, or Android,
+ * when XDG environment variables are set, paths are redirected under
+ * $XDG_*_HOME/omp/. A new instance is created whenever the agent directory
+ * changes, which naturally invalidates all cached paths.
  */
 class DirResolver {
 	readonly configRoot: string;
 	readonly agentDir: string;
 
 	// Per-category base dirs. Without XDG, all three equal configRoot / agentDir.
-	// With XDG on Linux, they point to $XDG_*_HOME/omp/.
+	// With XDG on Linux, macOS, or Android, they point to $XDG_*_HOME/omp/.
 	readonly #rootDirs: Record<XdgCategory, string>;
 	readonly #agentDirs: Record<XdgCategory, string>;
 
@@ -246,7 +248,7 @@ class DirResolver {
 		this.agentDir = agentDirOverride ? path.resolve(agentDirOverride) : defaultAgent;
 		const isDefault = this.agentDir === defaultAgent;
 
-		// XDG is a Linux convention. On supported platforms, default profile state
+		// XDG is a Unix convention. On supported platforms, default profile state
 		// resolves under $XDG_*_HOME/omp once `omp config init-xdg` has migrated
 		// the user's data. Named profiles follow a stricter rule: the XDG choice
 		// is keyed on the profile-specific XDG path, never the base app root.
@@ -261,7 +263,7 @@ class DirResolver {
 		let xdgData: string | undefined;
 		let xdgState: string | undefined;
 		let xdgCache: string | undefined;
-		if ((process.platform === "linux" || process.platform === "darwin") && isDefault) {
+		if (IS_XDG_PLATFORM && isDefault) {
 			const resolveIf = (envVar: string) => {
 				const value = process.env[envVar];
 				if (!value) return undefined;

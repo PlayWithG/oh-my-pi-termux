@@ -4,6 +4,15 @@ import { discoveryFetch } from "../utils";
 
 const MODELS_PATH = "/models";
 
+export function compareOpenAICompatibleModelIds(left: string, right: string): number {
+	const leftKey = left.replace(/[A-Z]/g, character => String.fromCharCode(character.charCodeAt(0) + 32));
+	const rightKey = right.replace(/[A-Z]/g, character => String.fromCharCode(character.charCodeAt(0) + 32));
+	if (leftKey !== rightKey) {
+		return leftKey < rightKey ? -1 : 1;
+	}
+	return left < right ? -1 : left > right ? 1 : 0;
+}
+
 /**
  * Uses a cancellable timer rather than the native abort-timeout helper so
  * successful fast discovery requests do not leave armed timeout signals for
@@ -209,7 +218,7 @@ export async function fetchOpenAICompatibleModels<TApi extends Api>(
 		deduped.set(mapped.id, mapped);
 	}
 
-	return Array.from(deduped.values()).sort((left, right) => left.id.localeCompare(right.id));
+	return Array.from(deduped.values()).sort((left, right) => compareOpenAICompatibleModelIds(left.id, right.id));
 }
 
 function normalizeBaseUrl(baseUrl: string): string {

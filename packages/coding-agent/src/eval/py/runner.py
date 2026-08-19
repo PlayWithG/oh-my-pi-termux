@@ -742,7 +742,16 @@ def _magic_run(args: str) -> None:
 
 def _resolve_bash() -> str:
     if os.name != "nt":
-        return "/bin/bash"
+        found = shutil.which("bash")
+        if found:
+            return found
+        fallback = "/bin/bash"
+        if os.path.isfile(fallback):
+            return fallback
+        raise RuntimeError(
+            "%%bash requires bash, but no executable was found on PATH and "
+            "/bin/bash does not exist."
+        )
     # Prefer Git Bash over WSL's System32 bash.exe, which runs inside a
     # separate Linux environment and does not share the Windows filesystem
     # layout or PATH.
