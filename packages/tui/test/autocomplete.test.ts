@@ -384,9 +384,7 @@ describe("CombinedAutocompleteProvider", () => {
 
 			const result = await provider.getSuggestions([line], 0, line.length);
 
-			expect(result).not.toBeNull();
 			expect(result?.prefix).toBe("C:/");
-			expect(result?.items.length).toBeGreaterThan(0);
 			if (process.platform !== "win32") {
 				expect(result?.items.map(item => item.value)).toContain("C:/alpha.ts");
 			}
@@ -591,7 +589,6 @@ describe("CombinedAutocompleteProvider", () => {
 			const line = "@controller";
 			const result = await provider.getSuggestions([line], 0, line.length);
 
-			expect(result).not.toBeNull();
 			const values = result?.items.map(item => item.value) ?? [];
 			expect(values.length).toBeGreaterThan(20);
 			expect(values.length).toBeGreaterThanOrEqual(total);
@@ -704,7 +701,6 @@ describe("CombinedAutocompleteProvider", () => {
 			const provider = new CombinedAutocompleteProvider([], baseDir);
 			const line = "./up";
 			const result = await provider.getForceFileSuggestions([line], 0, line.length);
-			expect(result).not.toBeNull();
 			const values = result?.items.map(item => item.value) ?? [];
 			expect(values).toContain("./update.sh");
 		});
@@ -715,7 +711,6 @@ describe("CombinedAutocompleteProvider", () => {
 			const provider = new CombinedAutocompleteProvider([], baseDir);
 			const line = "./sr";
 			const result = await provider.getForceFileSuggestions([line], 0, line.length);
-			expect(result).not.toBeNull();
 			const values = result?.items.map(item => item.value) ?? [];
 			expect(values).toContain("./src/");
 		});
@@ -752,7 +747,6 @@ describe("trySyncSlashCompletion", () => {
 			"/tmp",
 		);
 		const result = provider.trySyncSlashCompletion("/mo");
-		expect(result).not.toBeNull();
 		expect(result!.prefix).toBe("/mo");
 		expect(result!.items.map(i => i.value)).toEqual(["model"]);
 	});
@@ -763,12 +757,11 @@ describe("trySyncSlashCompletion", () => {
 			"/tmp",
 		);
 		const result = provider.trySyncSlashCompletion("  /mo");
-		expect(result).not.toBeNull();
 		expect(result!.prefix).toBe("  /mo");
 		expect(result!.items.map(i => i.value)).toEqual(["model"]);
 	});
 
-	it("matches multiple commands and sorts by relevance", () => {
+	it("matches multiple commands and excludes non-matches", () => {
 		const provider = new CombinedAutocompleteProvider(
 			[
 				{ name: "model", description: "Switch AI model", value: "model" },
@@ -778,19 +771,11 @@ describe("trySyncSlashCompletion", () => {
 			"/tmp",
 		);
 		const result = provider.trySyncSlashCompletion("/mo");
-		expect(result).not.toBeNull();
 		const values = result!.items.map(i => i.value);
 		// /model and /mode should match; /help should not
 		expect(values).toContain("model");
 		expect(values).toContain("mode");
 		expect(values).not.toContain("help");
-		// The better name match should come first (higher score)
-		const modelIdx = values.indexOf("model");
-		const modeIdx = values.indexOf("mode");
-		// model matches 3/5 chars, mode matches 3/4 chars — mode has higher match ratio
-		// Both should be present; order depends on fuzzyScore internals
-		expect(modelIdx).not.toBe(-1);
-		expect(modeIdx).not.toBe(-1);
 	});
 
 	it("matches case-insensitively", () => {
@@ -799,7 +784,6 @@ describe("trySyncSlashCompletion", () => {
 			"/tmp",
 		);
 		const result = provider.trySyncSlashCompletion("/MOD");
-		expect(result).not.toBeNull();
 		expect(result!.items.map(i => i.value)).toContain("Model");
 	});
 
@@ -809,7 +793,6 @@ describe("trySyncSlashCompletion", () => {
 			"/tmp",
 		);
 		const result = provider.trySyncSlashCompletion("/model");
-		expect(result).not.toBeNull();
 		expect(result!.items.map(i => i.value)).toContain("md");
 	});
 
@@ -847,7 +830,6 @@ describe("trySyncSlashCompletion", () => {
 	it("handles AutocompleteItem-shaped commands (no 'name' property)", () => {
 		const provider = new CombinedAutocompleteProvider([{ value: "model", label: "Switch model" }], "/tmp");
 		const result = provider.trySyncSlashCompletion("/mod");
-		expect(result).not.toBeNull();
 		expect(result!.items.map(i => i.value)).toEqual(["model"]);
 	});
 
@@ -860,7 +842,6 @@ describe("trySyncSlashCompletion", () => {
 			"/tmp",
 		);
 		const result = await provider.getSuggestions(["/"], 0, 1);
-		expect(result).not.toBeNull();
 		expect(result!.items.map(i => i.value)).toEqual(["setup", "usage"]);
 	});
 
@@ -870,7 +851,6 @@ describe("trySyncSlashCompletion", () => {
 			"/tmp",
 		);
 		const result = await provider.getSuggestions(["/mod"], 0, 4);
-		expect(result).not.toBeNull();
 		expect(result!.items.map(i => i.value)).toEqual(["model"]);
 	});
 
@@ -883,7 +863,6 @@ describe("trySyncSlashCompletion", () => {
 			"/tmp",
 		);
 		const result = provider.trySyncSlashCompletion("/set");
-		expect(result).not.toBeNull();
 		// The sync-completion path applies items[0] on Enter; the shorter `setup`
 		// must not jump ahead of the earlier-registered `settings`.
 		expect(result!.items[0]?.value).toBe("settings");
@@ -898,7 +877,6 @@ describe("trySyncSlashCompletion", () => {
 			"/tmp",
 		);
 		const result = provider.trySyncSlashCompletion("/providers");
-		expect(result).not.toBeNull();
 		expect(result!.items[0]?.value).toBe("providers");
 	});
 
@@ -911,7 +889,6 @@ describe("trySyncSlashCompletion", () => {
 			"/tmp",
 		);
 		const result = provider.trySyncSlashCompletion("/q");
-		expect(result).not.toBeNull();
 		// The sync-completion path applies items[0] on Enter. Even though `queue`
 		// is registered first and shares the `q` prefix, the exact `q` alias on
 		// `quit` must win (score 1000 > 900) so /q + Enter dispatches the `q`
