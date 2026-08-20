@@ -27,7 +27,7 @@ on:
          - "patches/**"
          - ".github/**"
    pull_request:
-      branches: [main]
+      branches: [main, termux]
       paths:
          - "packages/**"
          - "crates/**"

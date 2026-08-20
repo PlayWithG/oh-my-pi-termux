@@ -132,6 +132,24 @@ curl -fsSL https://raw.githubusercontent.com/PlayWithG/oh-my-pi-termux/termux/sc
 The installer refuses to update a checkout with local changes; keep the
 persistent source directory clean before updating.
 
+#### Upstream synchronization
+
+The `termux` branch is synchronized from upstream by
+`.github/workflows/sync-upstream.yml` every week or by manual dispatch. A clean
+merge is pushed to a `sync/upstream-*` branch and opened as a pull request
+against `termux`; the workflow never merges it automatically. Conflicts create
+or update an issue and leave `termux` unchanged.
+
+Run the read-only check locally before reviewing a sync pull request:
+
+```sh
+bash scripts/sync-upstream.sh --check --upstream-ref main
+```
+
+After merging a reviewed sync pull request, rerun the Termux source installer
+to rebuild the Android native addon and relink `omp`. Do not use the generic
+`omp update` installer path for Android source-backed installations.
+
 Contributors can use the equivalent direct checkout workflow:
 
 ```sh

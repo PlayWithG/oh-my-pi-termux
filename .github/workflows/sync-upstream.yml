@@ -1,10 +1,10 @@
-name: Check OMP upstream sync
+name: Sync OMP upstream
 
 on:
   workflow_dispatch:
     inputs:
       upstream_ref:
-        description: Upstream branch or tag to check
+        description: Upstream branch or tag to synchronize
         required: true
         default: main
         type: string
@@ -12,29 +12,39 @@ on:
     - cron: "17 5 * * 1"
 
 permissions:
-  contents: read
+  contents: write
+  issues: write
+  pull-requests: write
 
 jobs:
-  check:
-    name: Check upstream merge safety
+  sync:
+    name: Prepare upstream sync PR
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    env:
+      UPSTREAM_REF: ${{ inputs.upstream_ref || 'main' }}
     steps:
       - name: Checkout Termux branch
         uses: actions/checkout@v4
         with:
           ref: termux
           fetch-depth: 0
-          persist-credentials: false
 
-      - name: Check upstream merge
-        id: sync
-        env:
-          UPSTREAM_REF: ${{ inputs.upstream_ref || 'main' }}
+      - name: Prepare merge branch
+        id: prepare
+        shell: bash
         run: |
-          set -o pipefail
-          bash scripts/sync-upstream.sh --check --upstream-ref "$UPSTREAM_REF" \
+          set +e
+          safe_ref=$(printf '%s' "$UPSTREAM_REF" | tr '/:' '--' | tr -c '[:alnum:]._-\n' '-')
+          sync_branch="sync/upstream-${safe_ref}"
+          echo "sync_branch=$sync_branch" >> "$GITHUB_OUTPUT"
+          bash scripts/sync-upstream-pr.sh \
+            --branch "$sync_branch" \
+            --upstream-ref "$UPSTREAM_REF" \
             2>&1 | tee "$RUNNER_TEMP/omp-sync-report.txt"
+          status=${PIPESTATUS[0]}
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
 
       - name: Upload sync report
         if: always()
@@ -43,3 +53,58 @@ jobs:
           name: omp-upstream-sync-report
           path: ${{ runner.temp }}/omp-sync-report.txt
           if-no-files-found: ignore
+
+      - name: Report upstream conflict
+        if: steps.prepare.outputs.status == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Upstream sync conflict: ${UPSTREAM_REF}"
+          body_file="$RUNNER_TEMP/omp-sync-issue.md"
+          {
+            echo "The automated merge of upstream \\`${UPSTREAM_REF}\\` into \\`termux\\` has conflicts."
+            echo
+            echo "No downstream branch was changed or pushed. Resolve the conflict locally, run the native Termux gates, and push the resulting merge."
+            echo
+            echo '```text'
+            cat "$RUNNER_TEMP/omp-sync-report.txt"
+            echo '```'
+          } > "$body_file"
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "${title} in:title" --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body-file "$body_file"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file "$body_file"
+          fi
+          exit 1
+
+      - name: Fail on sync preparation error
+        if: steps.prepare.outputs.status != '0' && steps.prepare.outputs.status != '1' && steps.prepare.outputs.status != '10'
+        run: exit 1
+
+      - name: Stop when already synchronized
+        if: steps.prepare.outputs.status == '10'
+        run: echo "No upstream changes need synchronization."
+
+      - name: Push sync branch
+        if: steps.prepare.outputs.status == '0'
+        run: git push origin "HEAD:${{ steps.prepare.outputs.sync_branch }}" --force-with-lease
+
+      - name: Create or update sync PR
+        if: steps.prepare.outputs.status == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          branch="${{ steps.prepare.outputs.sync_branch }}"
+          title="sync: upstream ${UPSTREAM_REF}"
+          existing=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --base termux --head "$branch" --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            echo "Updated existing PR #$existing"
+          else
+            gh pr create \
+              --repo "$GITHUB_REPOSITORY" \
+              --base termux \
+              --head "$branch" \
+              --title "$title" \
+              --body "Automated clean merge of upstream \\`${UPSTREAM_REF}\\`. Run the Termux native build and smoke gates before merging."
+          fi
