@@ -34,7 +34,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          safe_ref=$(printf '%s' "$UPSTREAM_REF" | tr '/:' '--' | tr -c '[:alnum:]._-\n' '-')
+          safe_ref=$(printf '%s' "$UPSTREAM_REF" | tr '/:' '--' | tr -c '[:alnum:]_.-' '-')
           sync_branch="sync/upstream-${safe_ref}"
           echo "sync_branch=$sync_branch" >> "$GITHUB_OUTPUT"
           bash scripts/sync-upstream-pr.sh \
