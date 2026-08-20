@@ -583,7 +583,10 @@ install_android_source() {
 
     echo "Building and linking OMP from $ANDROID_SOURCE_DIR..."
     android_setup_status=0
-    if (CDPATH='' cd -- "$ANDROID_SOURCE_DIR" && bun run setup); then
+    if (CDPATH='' cd -- "$ANDROID_SOURCE_DIR" &&
+        bun install &&
+        bun run build:native &&
+        bun --cwd=packages/coding-agent link); then
         :
     else
         android_setup_status=$?
@@ -593,6 +596,10 @@ install_android_source() {
         echo "Failed to build and link OMP from the Android source checkout"
         exit "$android_setup_status"
     fi
+    # build:native regenerates this checked-in declaration with deterministic
+    # reorder churn on Bun/Android. Restore it before the clean-check gate so a
+    # failed update never changes the managed checkout or the active launcher.
+    git -C "$ANDROID_SOURCE_DIR" restore -- packages/natives/native/index.d.ts
     if ! android_status=$(git -C "$ANDROID_SOURCE_DIR" status --porcelain); then
         echo "Failed to inspect the Android source checkout after setup"
         exit 1
@@ -600,6 +607,11 @@ install_android_source() {
     if [ -n "$android_status" ]; then
         echo "Android setup left unexpected local changes in the managed checkout:"
         printf '%s\n' "$android_status"
+        exit 1
+    fi
+
+    if ! (CDPATH='' cd -- "$ANDROID_SOURCE_DIR" && sh scripts/link-omp.sh); then
+        echo "Failed to link the verified Android omp launcher"
         exit 1
     fi
 
