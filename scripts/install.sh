@@ -629,6 +629,10 @@ install_android_source() {
     fi
 
     prepare_bun_install
+    if [ -z "${CARGO_BUILD_JOBS:-}" ]; then
+        CARGO_BUILD_JOBS=1
+        export CARGO_BUILD_JOBS
+    fi
     prepare_android_checkout
 
     echo "Building and linking OMP from $ANDROID_SOURCE_DIR..."
