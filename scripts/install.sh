@@ -12,7 +12,7 @@ set -e
 
 REPO="PlayWithG/oh-my-pi-termux"
 BUN_RELEASE_REPO="${BUN_RELEASE_REPO:-PlayWithG/bun}"
-BUN_RELEASE_TAG="${BUN_RELEASE_TAG:-termux-v1.4.0}"
+BUN_RELEASE_TAG="${BUN_RELEASE_TAG:-termux-v1.4.2}"
 PACKAGE="@oh-my-pi/pi-coding-agent"
 INSTALL_DIR="${PI_INSTALL_DIR:-$HOME/.local/bin}"
 MIN_BUN_VERSION="1.4.0"
