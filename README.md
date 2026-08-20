@@ -78,19 +78,20 @@ Install the build prerequisites in Termux:
 
 ```sh
 pkg update
-pkg install bun curl git clang cmake make pkg-config rust python
+pkg install coreutils curl git clang cmake make pkg-config rust python libc++
 ```
 
-Use the self-contained source installer with a native Termux Bun build
-(Bun `>= 1.3.14`):
+Use the self-contained source installer with a verified native Android/arm64 Bun
+(Bun `>= 1.4.0`):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/can1357/oh-my-pi/main/scripts/install.sh | sh -s -- --source
+curl -fsSL https://raw.githubusercontent.com/PlayWithG/oh-my-pi-termux/termux/scripts/install.sh | sh -s -- --source
 ```
 
-The installer requires native Android/arm64 Bun. If Bun is not available from
-your current Termux package sources, install another native Bun build before
-running the installer; Linux Bun binaries are not compatible with Android.
+If a native Bun `>= 1.4.0` is not already available, the installer downloads
+and checksum-verifies the Termux release from `PlayWithG/bun`. Linux Bun
+binaries are not compatible with Android. The `libc++` package is required by
+the downloaded Bun runtime.
 
 The installer keeps a persistent checkout at
 `${PI_SOURCE_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/omp-src}`. Set `PI_SOURCE_DIR`
@@ -113,17 +114,19 @@ The checkout lives under `omp-src`, not `omp`, so OMP's own XDG data root
 > note is scoped to the confirmed Bun 1.3.14 environment and does not claim
 > that future Bun versions are affected.
 
-To update or reinstall, run the same command again. The installer fetches the
-clean managed checkout, reruns the workspace setup, and relinks `omp`:
+To update or reinstall, run the same command again. Android source updates are
+performed by rerunning this installer; `omp update` is not the source-checkout
+updater on Termux. The installer fetches the clean managed checkout, reruns the
+workspace setup, and relinks `omp`:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/can1357/oh-my-pi/main/scripts/install.sh | sh -s -- --source
+curl -fsSL https://raw.githubusercontent.com/PlayWithG/oh-my-pi-termux/termux/scripts/install.sh | sh -s -- --source
 ```
 
 Pin a tag, branch, or commit with `--ref`:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/can1357/oh-my-pi/main/scripts/install.sh | sh -s -- --source --ref <tag-or-branch-or-commit>
+curl -fsSL https://raw.githubusercontent.com/PlayWithG/oh-my-pi-termux/termux/scripts/install.sh | sh -s -- --source --ref <tag-or-branch-or-commit>
 ```
 
 The installer refuses to update a checkout with local changes; keep the

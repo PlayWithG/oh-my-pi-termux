@@ -11,9 +11,11 @@ set -e
 #   -r <ref>       Shorthand for --ref
 
 REPO="PlayWithG/oh-my-pi-termux"
+BUN_RELEASE_REPO="${BUN_RELEASE_REPO:-PlayWithG/bun}"
+BUN_RELEASE_TAG="${BUN_RELEASE_TAG:-termux-v1.4.0}"
 PACKAGE="@oh-my-pi/pi-coding-agent"
 INSTALL_DIR="${PI_INSTALL_DIR:-$HOME/.local/bin}"
-MIN_BUN_VERSION="1.3.14"
+MIN_BUN_VERSION="1.4.0"
 
 # Parse arguments
 MODE=""
@@ -201,6 +203,52 @@ install_bun() {
     require_bun_version
 }
 
+install_android_bun() {
+    prepare_bun_install
+    if [ -z "${PREFIX:-}" ] || [ ! -f "$PREFIX/lib/libc++_shared.so" ]; then
+        echo "Termux libc++ is required at $PREFIX/lib/libc++_shared.so."
+        echo "Install it with: pkg install libc++"
+        exit 1
+    fi
+    android_bun_lib_dir="$BUN_INSTALL/lib"
+    android_bun_libcxx="$android_bun_lib_dir/libc++_shared.so"
+    if ! mkdir -p "$android_bun_lib_dir"; then
+        echo "Failed to create Bun's Android runtime directory: $android_bun_lib_dir"
+        exit 1
+    fi
+    if [ -e "$android_bun_libcxx" ] && [ ! -L "$android_bun_libcxx" ]; then
+        echo "Refusing to replace non-symlink: $android_bun_libcxx"
+        exit 1
+    fi
+    ln -sfn "$PREFIX/lib/libc++_shared.so" "$android_bun_libcxx"
+    bun_asset_url="https://github.com/${BUN_RELEASE_REPO}/releases/download/${BUN_RELEASE_TAG}/bun"
+    bun_sums_url="https://github.com/${BUN_RELEASE_REPO}/releases/download/${BUN_RELEASE_TAG}/SHA256SUMS"
+    bun_target="$BUN_INSTALL/bin/bun"
+    bun_tmp="$bun_target.download.$$"
+    bun_sums_tmp="$bun_target.sha256.$$"
+
+    echo "Installing native Android Bun ${BUN_RELEASE_TAG}..."
+    if ! curl -fsSL --connect-timeout 10 --speed-limit 1024 --speed-time 30 "$bun_asset_url" -o "$bun_tmp" ||
+        ! curl -fsSL --connect-timeout 10 --max-time 60 "$bun_sums_url" -o "$bun_sums_tmp"; then
+        rm -f "$bun_tmp" "$bun_sums_tmp"
+        echo "Failed to download native Android Bun from ${BUN_RELEASE_REPO}."
+        exit 1
+    fi
+
+    bun_expected_sha=$(awk '$2 == "bun" { print $1; exit }' "$bun_sums_tmp")
+    bun_actual_sha=$(sha256sum "$bun_tmp" | awk '{ print $1 }')
+    if [ -z "$bun_expected_sha" ] || [ "$bun_expected_sha" != "$bun_actual_sha" ]; then
+        rm -f "$bun_tmp" "$bun_sums_tmp"
+        echo "Native Android Bun checksum verification failed."
+        exit 1
+    fi
+
+    chmod 755 "$bun_tmp"
+    mv -f "$bun_tmp" "$bun_target"
+    rm -f "$bun_sums_tmp"
+    echo "✓ Installed native Android Bun at $bun_target"
+}
+
 # Check if git-lfs is available
 has_git_lfs() {
     command -v git-lfs >/dev/null 2>&1
@@ -208,13 +256,15 @@ has_git_lfs() {
 
 require_android_bun() {
     if has_bun; then
-        return 0
+        current_bun_version=$(bun --version 2>/dev/null || true)
+        current_bun_version=${current_bun_version%%-*}
+        if [ -n "$current_bun_version" ] && version_ge "$current_bun_version" "$MIN_BUN_VERSION"; then
+            return 0
+        fi
+        echo "Existing Bun is older than ${MIN_BUN_VERSION}; installing the verified Termux release."
     fi
 
-    echo "A native Android Bun is required for the Termux source install."
-    echo "Install it in Termux with: pkg install bun"
-    echo "If that package is unavailable, install another native Bun for Android/arm64."
-    exit 1
+    install_android_bun
 }
 
 # Install via bun
